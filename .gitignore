@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+/buildwise_web/node_modules/
+.pnp
+.pnp.js
+
+# Next.js build output
+.next/
+/buildwise_web/.next/
+out/
+/buildwise_web/out/
+
+# Python Virtual Environments & Cache
+venv/
+/buildwise_api/venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Flutter/Dart build outputs and packages
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+/buildwise_app/build/
+*.flutter-plugins
+*.flutter-plugins-dependencies
+
+# Environment Variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+!.env.example
+!.env.prod.example
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# OS Files
+.DS_Store
+Thumbs.db
+desktop.ini

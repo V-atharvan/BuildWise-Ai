@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="BuildWise AI — AI-powered construction material estimation. Upload your building plan, let AI analyze it, and instantly get a precise Bill of Quantities with cost breakdown." />
+  <meta name="keywords" content="construction estimation, AI material takeoff, BOQ generator, building cost calculator" />
+  <title>BuildWise AI — AI-Powered Construction Estimation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="dark">
+
+  <!-- ───────────── NAVBAR ───────────── -->
+  <nav class="nav" id="navbar">
+    <div class="nav-inner">
+      <a class="nav-logo" href="http://localhost:3000/dashboard">
+        <span class="logo-icon">⬡</span>
+        <span>BuildWise<span class="logo-accent"> AI</span></span>
+      </a>
+      <ul class="nav-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#how-it-works">How It Works</a></li>
+        <li><a href="#pricing">Pricing</a></li>
+        <li><a href="#testimonials">Reviews</a></li>
+      </ul>
+      <div class="nav-actions">
+        <button class="btn-theme" id="themeToggle" aria-label="Toggle theme">☀</button>
+        <a href="http://localhost:3000/login" class="btn btn-ghost">Log In</a>
+        <a href="http://localhost:3000/signup" class="btn btn-primary">Get Started →</a>
+      </div>
+      <button class="nav-hamburger" id="hamburger" aria-label="Menu">☰</button>
+    </div>
+    <!-- Mobile menu -->
+    <div class="mobile-menu" id="mobileMenu">
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How It Works</a>
+      <a href="#pricing">Pricing</a>
+      <a href="http://localhost:3000/signup">Get Started</a>
+    </div>
+  </nav>
+
+  <!-- ───────────── HERO ───────────── -->
+  <section class="hero" id="home">
+    <div class="hero-bg-glow"></div>
+    <div class="hero-bg-grid"></div>
+    <div class="container">
+      <div class="hero-badge animate-in">
+        <span class="badge-dot"></span>
+        AI-Powered Civil Engineering Platform
+      </div>
+      <h1 class="hero-title animate-in delay-1">
+        Turn Blueprint into<br />
+        <span class="gradient-text">Material Estimates</span><br />
+        in Seconds
+      </h1>
+      <p class="hero-subtitle animate-in delay-2">
+        Upload your building drawing. Our AI extracts rooms, walls, and dimensions — then instantly generates a precise Bill of Quantities, material schedule, and cost breakdown.
+      </p>
+      <div class="hero-actions animate-in delay-3">
+        <a href="http://localhost:3000/signup" class="btn btn-primary btn-lg">
+          <span>Start Free Trial</span>
+          <span class="btn-arrow">→</span>
+        </a>
+        <a href="#how-it-works" class="btn btn-outline btn-lg">
+          <span class="play-icon">▶</span>
+          Watch Demo
+        </a>
+      </div>
+      <div class="hero-stats animate-in delay-4">
+        <div class="stat">
+          <span class="stat-number">98%</span>
+          <span class="stat-label">Accuracy Rate</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <span class="stat-number">3x</span>
+          <span class="stat-label">Faster Than Manual</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <span class="stat-number">12+</span>
+          <span class="stat-label">Material Calculators</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <span class="stat-number">5K+</span>
+          <span class="stat-label">Engineers Worldwide</span>
+        </div>
+      </div>
+    </div>
+    <!-- Hero Dashboard Mockup -->
+    <div class="hero-mockup animate-in delay-3">
+      <div class="mockup-window">
+        <div class="mockup-titlebar">
+          <span class="dot red"></span><span class="dot amber"></span><span class="dot green"></span>
+          <span class="mockup-url">buildwise.ai/estimate</span>
+        </div>
+        <div class="mockup-body">
+          <div class="mock-sidebar">
+            <div class="mock-nav-item active">⬡ Dashboard</div>
+            <div class="mock-nav-item">📁 Projects</div>
+            <div class="mock-nav-item">📤 Upload</div>
+            <div class="mock-nav-item">💬 AI Chat</div>
+          </div>
+          <div class="mock-content">
+            <div class="mock-header">Material Estimation Summary</div>
+            <div class="mock-cards">
+              <div class="mock-card">
+                <div class="mock-card-icon">🪨</div>
+                <div class="mock-card-value">124.5 m³</div>
+                <div class="mock-card-label">Concrete Volume</div>
+              </div>
+              <div class="mock-card">
+                <div class="mock-card-icon">🔩</div>
+                <div class="mock-card-value">9,960 kg</div>
+                <div class="mock-card-label">Steel (Fe500)</div>
+              </div>
+              <div class="mock-card">
+                <div class="mock-card-icon">🧱</div>
+                <div class="mock-card-value">62,240</div>
+                <div class="mock-card-label">Bricks Count</div>
+              </div>
+            </div>
+            <div class="mock-total">
+              <span class="mock-total-label">Grand Total</span>
+              <span class="mock-total-value">₹ 84,52,400</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────── LOGOS ───────────── -->
+  <section class="logos-bar">
+    <div class="container">
+      <p class="logos-label">Trusted by engineers at leading firms</p>
+      <div class="logos-row">
+        <span class="logo-pill">L&T Construction</span>
+        <span class="logo-pill">Shapoorji Pallonji</span>
+        <span class="logo-pill">DLF Group</span>
+        <span class="logo-pill">Prestige Estates</span>
+        <span class="logo-pill">Godrej Properties</span>
+        <span class="logo-pill">Tata Projects</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────── FEATURES ───────────── -->
+  <section class="features section" id="features">
+    <div class="container">
+      <div class="section-header">
+        <div class="section-badge">Features</div>
+        <h2 class="section-title">Everything an engineer needs, <br /><span class="gradient-text">in one platform</span></h2>
+        <p class="section-subtitle">From blueprint upload to final cost report — BuildWise handles it all, end to end.</p>
+      </div>
+      <div class="features-grid">
+
+        <div class="feature-card" data-aos>
+          <div class="feature-icon-wrap">
+            <span class="feature-icon">🧠</span>
+          </div>
+          <h3>AI Drawing Analysis</h3>
+          <p>Upload PDFs, PNGs, DWGs, or scanned blueprints. Our AI uses OpenCV + YOLO to detect walls, rooms, doors, windows, and scales.</p>
+          <div class="feature-tags">
+            <span class="tag">OpenCV</span><span class="tag">YOLO</span><span class="tag">EasyOCR</span>
+          </div>
+        </div>
+
+        <div class="feature-card featured" data-aos>
+          <div class="feature-badge-top">Most Popular</div>
+          <div class="feature-icon-wrap">
+            <span class="feature-icon">⚖️</span>
+          </div>
+          <h3>Precision Material Engine</h3>
+          <p>Calculates concrete volumes (IS dry multiplier), steel tonnage, brick courses, cement bags, sand, aggregate, plaster, and finishes — with 12 built-in calculators.</p>
+          <div class="feature-tags">
+            <span class="tag">IS Code</span><span class="tag">M15–M30</span><span class="tag">Fe415–Fe550D</span>
+          </div>
+        </div>
+
+        <div class="feature-card" data-aos>
+          <div class="feature-icon-wrap">
+            <span class="feature-icon">💰</span>
+          </div>
+          <h3>Instant Cost Estimation</h3>
+          <p>Automatically prices materials using live market rates. Includes labour, equipment, GST, contractor margin, and contingency buffers.</p>
+          <div class="feature-tags">
+            <span class="tag">GST Included</span><span class="tag">Live Rates</span>
+          </div>
+        </div>
+
+        <div class="feature-card" data-aos>
+          <div class="feature-icon-wrap">
+            <span class="feature-icon">📄</span>
+          </div>
+          <h3>PDF BOQ Reports</h3>
+          <p>Generate professional Bill of Quantities PDFs instantly. Share with clients, download for tender submissions, or archive for compliance.</p>
+          <div class="feature-tags">
+            <span class="tag">ReportLab</span><span class="tag">Shareable</span>
+          </div>
+        </div>
+
+        <div class="feature-card" data-aos>
+          <div class="feature-icon-wrap">
+            <span class="feature-icon">💬</span>
+          </div>
+          <h3>AI Assistant Chat</h3>
+          <p>Ask anything — mix ratios, steel percentages, brick coverage, scale conversions, IS code references. Get instant expert answers.</p>
+          <div class="feature-tags">
+            <span class="tag">Natural Language</span><span class="tag">IS Codes</span>
+          </div>
+        </div>
+
+        <div class="feature-card" data-aos>
+          <div class="feature-icon-wrap">
+            <span class="feature-icon">☁️</span>
+          </div>
+          <h3>Cloud Projects & History</h3>
+          <p>All your projects are saved securely. Clone, archive, compare estimates, and collaborate with your team in real time.</p>
+          <div class="feature-tags">
+            <span class="tag">PostgreSQL</span><span class="tag">S3 Storage</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────── HOW IT WORKS ───────────── -->
+  <section class="how section" id="how-it-works">
+    <div class="container">
+      <div class="section-header">
+        <div class="section-badge">How It Works</div>
+        <h2 class="section-title">From drawing to report in<br /><span class="gradient-text">4 simple steps</span></h2>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-number">01</div>
+          <div class="step-content">
+            <div class="step-icon">📤</div>
+            <h3>Upload Your Drawing</h3>
+            <p>Drag & drop your PDF, PNG, DWG, or DXF building plan. Camera scanning is also supported.</p>
+          </div>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step">
+          <div class="step-number">02</div>
+          <div class="step-content">
+            <div class="step-icon">🔍</div>
+            <h3>AI Analyzes the Plan</h3>
+            <p>Our AI pipeline reads walls, rooms, dimensions, scales, and annotations using computer vision and OCR.</p>
+          </div>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step">
+          <div class="step-number">03</div>
+          <div class="step-content">
+            <div class="step-icon">⚙️</div>
+            <h3>Configure Parameters</h3>
+            <p>Select building type, concrete grade, steel grade, brick type, number of floors, and more. Adjust AI detections if needed.</p>
+          </div>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step">
+          <div class="step-number">04</div>
+          <div class="step-content">
+            <div class="step-icon">📊</div>
+            <h3>Download BOQ Report</h3>
+            <p>Instantly receive a full material schedule, cost breakdown, and a professional PDF report ready for clients or tender.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────── CALCULATOR PREVIEW ───────────── -->
+  <section class="calc-preview section">
+    <div class="container">
+      <div class="section-header">
+        <div class="section-badge">Material Engine</div>
+        <h2 class="section-title">12 Civil Calculators, <span class="gradient-text">one click</span></h2>
+        <p class="section-subtitle">Based on IS code standards and proven quantity surveying formulas.</p>
+      </div>
+      <div class="calc-grid">
+        <div class="calc-item"><span class="calc-icon">🪨</span><span>Concrete Volume</span></div>
+        <div class="calc-item"><span class="calc-icon">🔩</span><span>Steel Reinforcement</span></div>
+        <div class="calc-item"><span class="calc-icon">🧱</span><span>Brick & Block Masonry</span></div>
+        <div class="calc-item"><span class="calc-icon">🪣</span><span>Cement Bags</span></div>
+        <div class="calc-item"><span class="calc-icon">⛱️</span><span>Sand Volume</span></div>
+        <div class="calc-item"><span class="calc-icon">🪨</span><span>Coarse Aggregate</span></div>
+        <div class="calc-item"><span class="calc-icon">🎨</span><span>Plaster & Paint</span></div>
+        <div class="calc-item"><span class="calc-icon">🟦</span><span>Floor Tiles</span></div>
+        <div class="calc-item"><span class="calc-icon">💧</span><span>Waterproofing</span></div>
+        <div class="calc-item"><span class="calc-icon">🏗️</span><span>Earthwork & Excavation</span></div>
+        <div class="calc-item"><span class="calc-icon">⚡</span><span>Electrical Conduit</span></div>
+        <div class="calc-item"><span class="calc-icon">🚿</span><span>Plumbing & Sanitation</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────── PRICING ───────────── -->
+  <section class="pricing section" id="pricing">
+    <div class="container">
+      <div class="section-header">
+        <div class="section-badge">Pricing</div>
+        <h2 class="section-title">Simple, transparent<br /><span class="gradient-text">pricing for all teams</span></h2>
+        <p class="section-subtitle">Start free. Upgrade when you're ready. No hidden fees.</p>
+      </div>
+      <div class="pricing-toggle">
+        <span id="billingMonthly" class="billing-label active">Monthly</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="billingToggle" />
+          <span class="toggle-slider"></span>
+        </label>
+        <span id="billingAnnual" class="billing-label">Annual <span class="save-badge">Save 25%</span></span>
+      </div>
+      <div class="pricing-grid">
+        <div class="pricing-card">
+          <div class="pricing-name">Starter</div>
+          <div class="pricing-price">
+            <span class="price-currency">₹</span>
+            <span class="price-amount" data-monthly="0" data-annual="0">0</span>
+            <span class="price-period">/mo</span>
+          </div>
+          <p class="pricing-desc">For individual engineers exploring AI estimation.</p>
+          <ul class="pricing-features">
+            <li>✓ 3 Projects / month</li>
+            <li>✓ Basic material calculators</li>
+            <li>✓ PDF reports (watermarked)</li>
+            <li>✓ AI assistant (10 queries/day)</li>
+            <li>✗ <span class="muted">Custom rates</span></li>
+            <li>✗ <span class="muted">Team collaboration</span></li>
+          </ul>
+          <a href="#" class="btn btn-outline btn-full">Get Started Free</a>
+        </div>
+        <div class="pricing-card featured">
+          <div class="popular-badge">Most Popular</div>
+          <div class="pricing-name">Professional</div>
+          <div class="pricing-price">
+            <span class="price-currency">₹</span>
+            <span class="price-amount" data-monthly="1999" data-annual="1499">1,999</span>
+            <span class="price-period">/mo</span>
+          </div>
+          <p class="pricing-desc">For professional engineers and small construction firms.</p>
+          <ul class="pricing-features">
+            <li>✓ Unlimited projects</li>
+            <li>✓ All 12 material calculators</li>
+            <li>✓ Clean PDF reports</li>
+            <li>✓ Unlimited AI assistant</li>
+            <li>✓ Custom material rates</li>
+            <li>✗ <span class="muted">Team collaboration</span></li>
+          </ul>
+          <a href="#" class="btn btn-primary btn-full">Start Pro Trial</a>
+        </div>
+        <div class="pricing-card">
+          <div class="pricing-name">Enterprise</div>
+          <div class="pricing-price">
+            <span class="price-currency">₹</span>
+            <span class="price-amount" data-monthly="7999" data-annual="5999">7,999</span>
+            <span class="price-period">/mo</span>
+          </div>
+          <p class="pricing-desc">For construction firms, QS departments, and large teams.</p>
+          <ul class="pricing-features">
+            <li>✓ Everything in Professional</li>
+            <li>✓ Team collaboration (20 users)</li>
+            <li>✓ Priority AI processing</li>
+            <li>✓ Custom integrations</li>
+            <li>✓ Dedicated account manager</li>
+            <li>✓ On-premise deployment</li>
+          </ul>
+          <a href="#" class="btn btn-outline btn-full">Contact Sales</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────── TESTIMONIALS ───────────── -->
+  <section class="testimonials section" id="testimonials">
+    <div class="container">
+      <div class="section-header">
+        <div class="section-badge">Testimonials</div>
+        <h2 class="section-title">Engineers love<br /><span class="gradient-text">BuildWise AI</span></h2>
+      </div>
+      <div class="testimonials-grid">
+        <div class="testimonial-card">
+          <div class="stars">★★★★★</div>
+          <p class="testimonial-text">"What used to take our quantity surveyor team 3 days now takes 20 minutes. BuildWise AI is genuinely game-changing for our tender submissions."</p>
+          <div class="testimonial-author">
+            <div class="author-avatar">RK</div>
+            <div>
+              <div class="author-name">Rajesh Kumar</div>
+              <div class="author-role">Senior QS, L&T Construction</div>
+            </div>
+          </div>
+        </div>
+        <div class="testimonial-card featured">
+          <div class="stars">★★★★★</div>
+          <p class="testimonial-text">"The AI drawing detection is astonishingly accurate even on scanned hand-drawn plans. The OCR picks up dimension annotations that I struggle to read myself."</p>
+          <div class="testimonial-author">
+            <div class="author-avatar">PM</div>
+            <div>
+              <div class="author-name">Priya Mehta</div>
+              <div class="author-role">Civil Engineer, Prestige Estates</div>
+            </div>
+          </div>
+        </div>
+        <div class="testimonial-card">
+          <div class="stars">★★★★★</div>
+          <p class="testimonial-text">"We use BuildWise for every residential project. The IS code-based calculations give us full confidence in front of clients and regulatory bodies."</p>
+          <div class="testimonial-author">
+            <div class="author-avatar">AS</div>
+            <div>
+              <div class="author-name">Aditya Sharma</div>
+              <div class="author-role">Director, BuildCraft India</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────── CTA ───────────── -->
+  <section class="cta-section section" id="cta">
+    <div class="cta-glow"></div>
+    <div class="container">
+      <div class="cta-box">
+        <div class="cta-badge">Ready to get started?</div>
+        <h2 class="cta-title">Build smarter.<br /><span class="gradient-text">Estimate faster.</span></h2>
+        <p class="cta-subtitle">Join 5,000+ civil engineers who trust BuildWise AI for accurate, professional material estimation.</p>
+        <div class="cta-actions">
+          <a href="http://localhost:3000/signup" class="btn btn-primary btn-lg">Start Free Trial</a>
+          <a href="http://localhost:3000/login" class="btn btn-ghost btn-lg">Log In to Dashboard</a>
+        </div>
+        <p class="cta-note">No credit card required · Free plan available · Cancel anytime</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────── FOOTER ───────────── -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <div class="nav-logo">
+            <span class="logo-icon">⬡</span>
+            <span>BuildWise<span class="logo-accent"> AI</span></span>
+          </div>
+          <p>AI-powered construction material estimation for modern civil engineers and construction firms.</p>
+          <div class="social-links">
+            <a href="#" aria-label="Twitter">𝕏</a>
+            <a href="#" aria-label="LinkedIn">in</a>
+            <a href="#" aria-label="GitHub">⑂</a>
+          </div>
+        </div>
+        <div class="footer-col">
+          <h4>Product</h4>
+          <a href="#features">Features</a>
+          <a href="#pricing">Pricing</a>
+          <a href="http://localhost:3000/dashboard">Dashboard</a>
+          <a href="http://localhost:3000/upload">Upload Drawing</a>
+        </div>
+        <div class="footer-col">
+          <h4>App</h4>
+          <a href="http://localhost:3000/signup">Create Account</a>
+          <a href="http://localhost:3000/login">Sign In</a>
+          <a href="http://localhost:3000/chat">AI Chat</a>
+          <a href="http://localhost:3000/reports">Reports</a>
+        </div>
+        <div class="footer-col">
+          <h4>Legal</h4>
+          <a href="#">Privacy Policy</a>
+          <a href="#">Terms of Service</a>
+          <a href="#">Cookie Policy</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© 2026 BuildWise AI. All rights reserved.</span>
+        <span>Made with ♥ for civil engineers everywhere.</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

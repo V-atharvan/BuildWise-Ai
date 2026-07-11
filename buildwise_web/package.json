@@ -1,0 +1,53 @@
+{
+  "name": "buildwise_web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.4.0",
+    "@radix-ui/react-avatar": "^1.2.2",
+    "@radix-ui/react-dialog": "^1.1.19",
+    "@radix-ui/react-dropdown-menu": "^2.1.20",
+    "@radix-ui/react-label": "^2.1.11",
+    "@radix-ui/react-progress": "^1.1.12",
+    "@radix-ui/react-select": "^2.3.3",
+    "@radix-ui/react-separator": "^1.1.11",
+    "@radix-ui/react-slot": "^1.3.0",
+    "@radix-ui/react-switch": "^1.3.3",
+    "@radix-ui/react-tabs": "^1.1.17",
+    "@radix-ui/react-tooltip": "^1.2.12",
+    "@tailwindcss/forms": "^0.5.11",
+    "@tanstack/react-query": "^5.101.2",
+    "@tanstack/react-query-devtools": "^5.101.2",
+    "autoprefixer": "^10.5.2",
+    "axios": "^1.18.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
+    "framer-motion": "^12.42.2",
+    "lucide-react": "^1.24.0",
+    "next": "16.2.10",
+    "next-themes": "^0.4.6",
+    "postcss": "^8.5.16",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-hook-form": "^7.81.0",
+    "recharts": "^3.9.2",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^3.4.17",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.10",
+    "typescript": "^5"
+  }
+}

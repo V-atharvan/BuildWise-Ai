@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # Next.js web application frontend
+  web:
+    build:
+      context: ./buildwise_web
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - api
+
+  # FastAPI backend API service
+  api:
+    build:
+      context: ./buildwise_api
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./buildwise_api:/workspace
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/buildwise
+      - REDIS_URL=redis://redis:6379/0
+      - BACKEND_CORS_ORIGINS=["http://localhost:3000", "http://localhost:8000"]
+    depends_on:
+      - db
+      - redis
+
+  # Celery worker process for background AI image processing tasks
+  celery_worker:
+    build:
+      context: ./buildwise_api
+      dockerfile: Dockerfile
+    command: celery -A app.core.celery_app worker --loglevel=info
+    volumes:
+      - ./buildwise_api:/workspace
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/buildwise
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+
+  # PostgreSQL database storage
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=buildwise
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # Redis backend queue cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:
