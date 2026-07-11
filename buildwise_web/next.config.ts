@@ -2,8 +2,8 @@
 const nextConfig = {
   output: 'standalone',
   images: {
-    domains: ['localhost', 'buildwise-api.com'],
-  },
+  domains: ['localhost', 'buildwise-ai-bf3r.onrender.com'],
+},
   async rewrites() {
     return [
       {
