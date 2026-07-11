@@ -19,21 +19,20 @@ services:
           name: buildwise-redis
           property: connectionString
       - key: BACKEND_CORS_ORIGINS
-        value: '["https://buildwise.yourdomain.com", "https://app.yourdomain.com", "https://*.vercel.app", "http://localhost:3000"]'
+        value: '["https://app.yourdomain.com", "https://*.vercel.app", "http://localhost:3000"]'
       - key: SECRET_KEY
         generateValue: true
       - key: FIREBASE_CREDENTIALS_PATH
-        value: "" # Expose as variable or inject via secret file
+        value: ""
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
-        value: "10080" # 7 days in minutes
+        value: "10080"
 
-  # Celery Background Worker
+  # Celery Background Worker — uses a separate Dockerfile
   - type: worker
     name: buildwise-celery
     env: docker
-    dockerfilePath: Dockerfile
+    dockerfilePath: Dockerfile.celery
     dockerContext: buildwise_api
-    startCommand: celery -A app.core.celery_app worker --loglevel=info
     plan: starter
     numInstances: 1
     envVars:
@@ -51,11 +50,11 @@ services:
   - type: redis
     name: buildwise-redis
     plan: free
-    ipAllowList: [] # Access restricted to internal services only
+    ipAllowList: []
 
 databases:
   # PostgreSQL Database Instance
   - name: buildwise-db
     plan: free
     databaseName: buildwise
-    user: postgres
+    user: buildwise
