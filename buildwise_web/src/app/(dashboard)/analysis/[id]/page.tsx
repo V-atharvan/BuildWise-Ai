@@ -20,6 +20,31 @@ const STEPS = [
   { id: 'calc', label: 'Calculating Materials', desc: 'Estimating materials takeoff per IS codes' },
 ]
 
+// ── Parse a dimension string like "30'" or "30 X 50" → feet value ────────────
+function parseFtValue(s: string): number | null {
+  const m = s.match(/(\d+(?:\.\d+)?)/)
+  return m ? parseFloat(m[1]) : null
+}
+
+// Detect overall plot size from OCR text array
+// e.g. ["30'", "50'"] → 30 × 50 × 0.0929 m² → 1500 sqft
+function detectAreaFromOcr(texts: string[]): number | null {
+  // Look for patterns like "30'" paired with "50'" or "30X50" or "30 X 50"
+  const crossMatch = texts.join(' ').match(/(\d+)[\s']*[xX×][\s']*(\d+)/)
+  if (crossMatch) {
+    const a = parseFloat(crossMatch[1])
+    const b = parseFloat(crossMatch[2])
+    if (a > 0 && b > 0) return Math.round(a * b)  // in sq ft
+  }
+  // Fallback: find two numeric values > 10 that could be length/width
+  const nums = texts
+    .map(t => parseFtValue(t))
+    .filter((n): n is number => n !== null && n > 8 && n < 200)
+    .sort((a, b) => b - a)
+  if (nums.length >= 2) return Math.round(nums[0] * nums[1])
+  return null
+}
+
 export default function AnalysisProgressPage() {
   const { id: planId } = useParams() as { id: string }
   const router = useRouter()
@@ -29,12 +54,15 @@ export default function AnalysisProgressPage() {
   const [error, setError] = useState('')
   const [showWizard, setShowWizard] = useState(false)
   const [projectId, setProjectId] = useState('')
+  const [detectedArea, setDetectedArea] = useState<number | null>(null)
+  const [detectedRooms, setDetectedRooms] = useState<number | null>(null)
+  const [detectedDoors, setDetectedDoors] = useState<number | null>(null)
 
-  // Wizard states
+  // Wizard states — all start as null; will be filled from AI detection
   const [buildingType, setBuildingType] = useState('house')
   const [numFloors, setNumFloors] = useState(1)
   const [floorHeight, setFloorHeight] = useState(3.0)
-  const [totalArea, setTotalArea] = useState(1200)
+  const [totalArea, setTotalArea] = useState(1500)
   const [wallThickness, setWallThickness] = useState(0.23)
   const [slabThickness, setSlabThickness] = useState(0.12)
   const [concreteGrade, setConcreteGrade] = useState('M20')
@@ -71,6 +99,15 @@ export default function AnalysisProgressPage() {
       const demoPlan = stored ? JSON.parse(stored) : null
       if (demoPlan) setProjectId(demoPlan.project_id)
 
+      // ── Try to extract dimensions from filename (e.g. "30x50_house.png") ──
+      const filename: string = demoPlan?.filename || ''
+      const fnMatch = filename.match(/(\d+)[xX×](\d+)/)
+      if (fnMatch) {
+        const detA = Math.round(parseInt(fnMatch[1]) * parseInt(fnMatch[2]))
+        setDetectedArea(detA)
+        setTotalArea(detA)
+      }
+
       // Simulate all steps completing one by one
       let step = 0
       const advance = setInterval(() => {
@@ -95,6 +132,29 @@ export default function AnalysisProgressPage() {
 
         if (plan.status === 'done') {
           setActiveStep(STEPS.length - 1)
+
+          // ── Pre-fill wizard from AI detected data ──────────────────────────
+          const detected = plan.detected_data || {}
+          const ocrTexts: string[] = detected.ocr_text_readings || []
+          const parsedDims: any[] = detected.parsed_dimensions || []
+
+          // Try area from parsed_dimensions first, then ocr heuristic
+          const dimArea =
+            parsedDims.find((d: any) => d.label === 'total_area')?.value_sqft ||
+            parsedDims.find((d: any) => d.label === 'plot_area')?.value_sqft
+
+          const area =
+            dimArea ||
+            (detected.building_area_sq_m ? Math.round(detected.building_area_sq_m * 10.7639) : null) ||
+            detectAreaFromOcr(ocrTexts)
+
+          if (area && area > 50) {
+            setDetectedArea(area)
+            setTotalArea(area)
+          }
+          if (detected.room_count > 0) setDetectedRooms(detected.room_count)
+          if (detected.door_count > 0)  setDetectedDoors(detected.door_count)
+
           setTimeout(() => {
             if (active) { setStatus('done'); setShowWizard(true) }
           }, 1000)
@@ -398,7 +458,7 @@ export default function AnalysisProgressPage() {
             )}
           </motion.div>
         ) : (
-          /* Missing Information Wizard Form */
+          /* Auto-Detected Parameters Wizard — Confirm & Adjust */
           <motion.div
             key="wizard"
             initial={{ opacity: 0, y: 16 }}
@@ -410,12 +470,26 @@ export default function AnalysisProgressPage() {
                 <Settings className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-lg font-black">Configure Structural Inputs</h2>
+                <h2 className="text-lg font-black">Confirm Structural Parameters</h2>
                 <p className="text-[12.5px] text-black/40 dark:text-white/35 mt-0.5">
-                  Confirm structural constraints for final material takeoff
+                  AI pre-filled values from your drawing — adjust if needed, then calculate
                 </p>
               </div>
             </div>
+
+            {/* AI Detection Summary Banner */}
+            {(detectedArea || detectedRooms || detectedDoors) && (
+              <div className="px-4 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[12.5px] flex items-start gap-2.5">
+                <Sparkles className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <div>
+                  <span className="font-bold">Auto-detected from your plan: </span>
+                  {detectedArea && <span>Area ≈ <strong>{detectedArea.toLocaleString()} sq ft</strong></span>}
+                  {detectedRooms && <span> · <strong>{detectedRooms} rooms</strong></span>}
+                  {detectedDoors && <span> · <strong>{detectedDoors} doors</strong></span>}
+                  <span className="block mt-0.5 text-emerald-600/70 dark:text-emerald-400/60">Verify the values below and click Calculate Takeoff.</span>
+                </div>
+              </div>
+            )}
 
             {error && (
               <div className="px-4 py-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-500 text-[13.5px] flex items-center gap-2">

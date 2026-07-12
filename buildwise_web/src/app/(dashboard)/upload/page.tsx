@@ -152,6 +152,17 @@ export default function UploadPage() {
       }
     }
 
+    // Read file data URL upfront to ensure it's loaded before redirecting
+    const readFileAsDataURL = (f: File): Promise<string> => {
+      return new Promise((resolve) => {
+        const r = new FileReader()
+        r.onload = () => resolve(r.result as string)
+        r.onerror = () => resolve('')
+        r.readAsDataURL(f)
+      })
+    }
+    const fileDataUrl = await readFileAsDataURL(file)
+
     // Try real API first; fall back to demo simulation
     try {
       const { uploadApi } = await import('@/lib/api')
@@ -164,11 +175,18 @@ export default function UploadPage() {
         file.name,
         (pct) => setProgress(pct),
         (planId) => {
+          if (fileDataUrl) {
+            try {
+              localStorage.setItem(`bw_demo_file_data_${planId}`, fileDataUrl)
+            } catch { /* ignore */ }
+          }
+
           // Store demo plan so analysis page can read it
           localStorage.setItem(`bw_demo_plan_${planId}`, JSON.stringify({
             id: planId,
             project_id: activeProjectId,
             filename: file.name,
+            file_size: file.size,
             status: 'done',
             created_at: new Date().toISOString(),
           }))
@@ -274,21 +292,10 @@ export default function UploadPage() {
 
         {/* Project Selector (Presented Second, Optional/Auto-created) */}
         <div className="border-t border-black/[0.06] dark:border-white/[0.06] pt-6">
-          <div className="flex items-center justify-between mb-2">
-            <label className="flex items-center gap-1.5 text-[13px] font-semibold text-black/60 dark:text-white/50">
+          <label className="flex items-center gap-1.5 text-[13px] font-semibold text-black/60 dark:text-white/50">
               <Folder className="w-4 h-4 text-black/40 dark:text-white/30" />
               Assign to Project
             </label>
-            {!isUploading && (
-              <button
-                onClick={() => setShowNewProject(!showNewProject)}
-                className="flex items-center gap-1 text-[12px] text-violet-500 hover:text-violet-600 font-semibold transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                New Project
-              </button>
-            )}
-          </div>
 
           {/* Inline create project form */}
           {showNewProject && !isUploading && (

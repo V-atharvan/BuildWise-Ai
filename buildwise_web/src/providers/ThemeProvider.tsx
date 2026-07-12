@@ -5,7 +5,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react'
 type Theme = 'light' | 'dark'
 
 interface ThemeContextType {
-  theme: string
+  theme: Theme
   setTheme: (theme: Theme) => void
 }
 
@@ -13,29 +13,32 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>('dark')
-  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    // Read from localStorage on mount
-    const saved = localStorage.getItem('theme') as Theme
-    if (saved === 'light' || saved === 'dark') {
-      setThemeState(saved)
-      document.documentElement.classList.toggle('dark', saved === 'dark')
-    } else {
-      // Default is dark mode
-      document.documentElement.classList.add('dark')
-    }
-    setMounted(true)
+    // Read from localStorage on mount; default to dark
+    const saved = localStorage.getItem('bw_theme') as Theme | null
+    const initial: Theme = saved === 'light' || saved === 'dark' ? saved : 'dark'
+    setThemeState(initial)
+    applyTheme(initial)
   }, [])
+
+  const applyTheme = (t: Theme) => {
+    const root = document.documentElement
+    if (t === 'dark') {
+      root.classList.add('dark')
+    } else {
+      root.classList.remove('dark')
+    }
+  }
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme)
-    localStorage.setItem('theme', newTheme)
-    document.documentElement.classList.toggle('dark', newTheme === 'dark')
-  };
+    localStorage.setItem('bw_theme', newTheme)
+    applyTheme(newTheme)
+  }
 
   return (
-    <ThemeContext.Provider value={{ theme: mounted ? theme : 'dark', setTheme }}>
+    <ThemeContext.Provider value={{ theme, setTheme }}>
       {children}
     </ThemeContext.Provider>
   )

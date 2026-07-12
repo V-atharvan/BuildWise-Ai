@@ -14,7 +14,6 @@ import {
 const navItems = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Projects', href: '/projects', icon: FolderOpen },
-  { label: 'Upload', href: '/upload', icon: Upload },
   { label: 'Reports', href: '/reports', icon: FileText },
   { label: 'AI Chat', href: '/chat', icon: MessageSquare, badge: 'AI' },
 ]
@@ -126,9 +125,12 @@ export function Sidebar({ onClose }: SidebarProps) {
         {/* Theme toggle */}
         <button
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-[14px] text-[13.5px] font-medium text-black/50 dark:text-white/40 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] hover:text-black/80 dark:hover:text-white/80 transition-all"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-[14px] text-[13.5px] font-medium text-black/50 dark:text-white/40 hover:bg-black/[0.04] dark:hover:bg-white/[0.04] hover:text-black/80 dark:hover:text-white/80 transition-all border border-black/[0.06] dark:border-white/[0.08]"
         >
-          {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          {theme === 'dark'
+            ? <Sun className="w-4 h-4 text-amber-400" />
+            : <Moon className="w-4 h-4 text-violet-500" />
+          }
           {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
         </button>
 

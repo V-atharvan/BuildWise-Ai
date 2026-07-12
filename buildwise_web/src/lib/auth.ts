@@ -1,4 +1,4 @@
-import { User } from './types'
+import { User, Role } from './types'
 
 const TOKEN_KEY = 'bw_access_token'
 const USER_KEY = 'bw_user'
@@ -97,6 +97,7 @@ export function demoRegister(params: {
     role: 'user',
     is_active: true,
     created_at: record.created_at,
+    updated_at: record.created_at,
   }
   return user
 }
@@ -112,9 +113,10 @@ export function demoLogin(email: string, password: string): User {
     full_name: record.full_name,
     email: record.email,
     company: record.company,
-    role: record.role,
+    role: record.role as Role,
     is_active: true,
     created_at: record.created_at,
+    updated_at: record.created_at,
   }
 }
 

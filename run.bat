@@ -87,7 +87,7 @@ if %count% gtr 45 (
     goto START_LOCAL
 )
 <nul set /p =.
-timeout /t 2 >nul
+ping 127.0.0.1 -n 3 >nul
 goto WAIT_LOOP
 
 :RUN_DOCKER
@@ -95,6 +95,8 @@ echo.
 echo [INFO] Starting all services with Docker Compose...
 echo [INFO] This will run Database, Redis, Celery, Backend API, and Next.js Frontend.
 echo.
+:: Open frontend URL in default browser automatically once container starts
+start "" cmd /c "ping 127.0.0.1 -n 8 >nul && start "" http://localhost:3000"
 docker compose up --build
 if %errorlevel% neq 0 (
     echo.
@@ -109,7 +111,7 @@ goto END
 :START_LOCAL
 echo.
 echo =======================================================================
-echo               Starting Frontend ^& Backend Locally (No Docker)
+echo           Starting Frontend, Backend ^& Celery Locally (No Docker)
 echo =======================================================================
 echo.
 
@@ -140,6 +142,12 @@ if not exist "buildwise_api\venv" (
 
 echo [INFO] Starting FastAPI Backend in a separate window...
 start "BuildWise Backend" cmd /c "cd buildwise_api && call venv\Scripts\activate && pip install -r requirements.txt && uvicorn app.main:app --reload --host 127.0.0.1 --port 8000"
+
+echo [INFO] Starting Celery Worker in a separate window...
+start "BuildWise Celery Worker" cmd /c "cd buildwise_api && call venv\Scripts\activate && celery -A app.core.celery_app worker --loglevel=info -P solo"
+
+:: Open frontend URL in default browser automatically once local server is ready
+start "" cmd /c "ping 127.0.0.1 -n 5 >nul && start "" http://localhost:3000"
 
 echo.
 echo [SUCCESS] Startup commands issued!

@@ -19,15 +19,33 @@ export default function EstimatePage() {
   const { id: projectId } = useParams() as { id: string }
   const searchParams = useSearchParams()
   const estimationId = searchParams.get('estimation_id')
+  const planId = searchParams.get('plan_id')
   const router = useRouter()
 
-  // Check if this is a demo estimation stored in localStorage
-  const isDemoEst = estimationId?.startsWith('demo_est_')
+  const isDemoProject = projectId?.startsWith('demo_proj_')
+  const isDemoEst = estimationId?.startsWith('demo_est_') || isDemoProject
 
-  // Load from localStorage if demo
-  const demoEstimation = isDemoEst && typeof window !== 'undefined'
-    ? (() => { try { return JSON.parse(localStorage.getItem(`bw_demo_est_${estimationId}`) || 'null') } catch { return null } })()
-    : null
+  // Load demo estimations from localStorage
+  const localEstimations = typeof window !== 'undefined'
+    ? (() => {
+        const results: any[] = []
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i)
+            if (!key?.startsWith('bw_demo_est_')) continue
+            const est = JSON.parse(localStorage.getItem(key) || '{}')
+            if (est.project_id === projectId || est.plan_id === planId) {
+              results.push(est)
+            }
+          }
+        } catch { /* ignore */ }
+        return results.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      })()
+    : []
+
+  const demoEstimation = estimationId
+    ? (localEstimations.find(e => e.id === estimationId) || (typeof window !== 'undefined' ? (() => { try { return JSON.parse(localStorage.getItem(`bw_demo_est_${estimationId}`) || 'null') } catch { return null } })() : null))
+    : (localEstimations.length > 0 ? localEstimations[0] : null)
 
   // If we have an estimation ID, load it. Otherwise, load the estimation list and get the latest
   const { data: estimations, isLoading: listLoading } = useQuery({
@@ -37,7 +55,7 @@ export default function EstimatePage() {
     retry: false,
   })
 
-  const activeEstId = estimationId || (estimations && estimations.length > 0 ? estimations[0].id : null)
+  const activeEstId = estimationId || demoEstimation?.id || (estimations && estimations.length > 0 ? estimations[0].id : null)
 
   const { data: backendEstimation, isLoading: estLoading } = useQuery({
     queryKey: ['estimation', activeEstId],
@@ -70,34 +88,59 @@ export default function EstimatePage() {
       if (estimation) {
         const m = estimation.materials
         const c = estimation.cost_breakdown
+        const materialCost =
+          (c.concrete_cost ?? 0) +
+          (c.steel_cost ?? 0) +
+          (c.cement_cost ?? 0) +
+          (c.sand_cost ?? 0) +
+          (c.aggregate_cost ?? 0) +
+          (c.brick_cost ?? 0) +
+          (c.block_cost ?? 0) +
+          (c.plaster_cost ?? 0) +
+          (c.paint_cost ?? 0) +
+          (c.tiles_cost ?? 0)
+        
+        const labourCost = c.labour_cost ?? 0
+        const equipCost = c.equipment_cost ?? 0
+        const contractorMargin = c.contractor_margin ?? 0
+        const subtotal = materialCost + labourCost + equipCost + contractorMargin
+        const gst = subtotal * 0.18
+        const total = estimation.total_cost ?? (subtotal + gst)
+
         const text = [
-          'BuildWise AI — Bill of Quantities (Demo)',
-          '==========================================',
+          'BuildWise AI — Bill of Quantities (Demo Mode)',
+          '==============================================',
           '',
-          'MATERIALS',
-          `-  Concrete Volume   : ${m.concrete_volume} m³`,
-          `-  Steel             : ${m.steel_weight} kg`,
-          `-  Cement            : ${m.cement_bags} bags`,
-          `-  Sand              : ${m.sand_volume} m³`,
-          `-  Aggregate         : ${m.aggregate_volume} m³`,
-          `-  Bricks            : ${m.bricks} nos`,
-          `-  Plaster Area      : ${m.plaster_area} m²`,
-          `-  Paint Area        : ${m.paint_area} m²`,
-          `-  Flooring Area     : ${m.flooring_area} m²`,
-          `-  Excavation        : ${m.excavation_volume} m³`,
+          'MATERIALS ESTIMATED:',
+          `-  Concrete Volume   : ${(m.concrete_volume ?? 0).toLocaleString()} m³`,
+          `-  Steel Reinforcing : ${(m.steel_weight ?? 0).toLocaleString()} kg`,
+          `-  Cement Bags       : ${(m.cement_bags ?? 0).toLocaleString()} bags`,
+          `-  Sand Volume       : ${(m.sand_volume ?? 0).toLocaleString()} m³`,
+          `-  Aggregate Volume  : ${(m.aggregate_volume ?? 0).toLocaleString()} m³`,
+          `-  Bricks Count      : ${(m.bricks_count ?? 0).toLocaleString()} nos`,
+          `-  AAC Blocks Count  : ${(m.blocks_count ?? 0).toLocaleString()} nos`,
+          `-  Plaster Area      : ${(m.plaster_area ?? 0).toLocaleString()} m²`,
+          `-  Paint Area        : ${(m.paint_area ?? 0).toLocaleString()} m²`,
+          `-  Flooring Tiles    : ${(m.tiles_area ?? 0).toLocaleString()} m²`,
+          `-  Excavation        : ${(m.excavation_volume ?? 0).toLocaleString()} m³`,
           '',
-          'COST SUMMARY',
-          `-  Material Cost     : ₹${c.material_cost.toLocaleString()}`,
-          `-  Labour Cost       : ₹${c.labour_cost.toLocaleString()}`,
-          `-  Equipment         : ₹${c.equipment_cost.toLocaleString()}`,
-          `-  GST (18%)         : ₹${c.gst.toLocaleString()}`,
-          `-  TOTAL             : ₹${c.total.toLocaleString()}`,
+          'COST SUMMARY:',
+          `-  Material Cost     : ₹${Math.round(materialCost).toLocaleString('en-IN')}`,
+          `-  Labour Cost       : ₹${Math.round(labourCost).toLocaleString('en-IN')}`,
+          `-  Equipment Cost    : ₹${Math.round(equipCost).toLocaleString('en-IN')}`,
+          `-  Contractor Margin : ₹${Math.round(contractorMargin).toLocaleString('en-IN')}`,
+          `-  GST (18% Buffer)  : ₹${Math.round(gst).toLocaleString('en-IN')}`,
+          '----------------------------------------------',
+          `-  GRAND TOTAL BOQ   : ₹${Math.round(total).toLocaleString('en-IN')}`,
         ].join('\n')
-        const blob = new Blob([text], { type: 'text/plain' })
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
-        a.href = url; a.download = 'BOQ_Demo.txt'
-        document.body.appendChild(a); a.click(); a.remove()
+        a.href = url
+        a.download = `BOQ_Report_${projectId}.txt`
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
       }
     },
   })
@@ -327,7 +370,7 @@ export default function EstimatePage() {
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => `₹${value.toLocaleString()}`} />
+                  <Tooltip formatter={(value) => value !== undefined && value !== null ? `₹${Number(value).toLocaleString()}` : ''} />
                 </PieChart>
               </ResponsiveContainer>
             </div>

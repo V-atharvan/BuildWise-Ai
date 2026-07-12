@@ -10,17 +10,20 @@ import { cn } from '@/lib/utils'
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    setMounted(true)
     if (!isAuthenticated()) {
       router.replace('/login')
     }
   }, [router])
 
+  if (!mounted) return null
   if (!isAuthenticated()) return null
 
   return (
-    <div className="min-h-screen bg-[#FAFAFC] dark:bg-[#121212] text-gray-900 dark:text-white flex" suppressHydrationWarning>
+    <div className="min-h-screen bg-[#FAFAFC] dark:bg-[#121212] text-gray-900 dark:text-white flex">
       {/* Desktop Sidebar */}
       <div className="hidden lg:flex flex-shrink-0">
         <div className="w-[240px] fixed inset-y-0 left-0 z-40">

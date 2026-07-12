@@ -2,7 +2,7 @@ import os
 from celery import shared_task
 from sqlalchemy.orm import Session
 from app.core.celery_app import celery_app
-from app.db.database import AsyncSessionLocal
+
 from app.models.plan import Plan
 from app.ai.pipeline import AiPipeline
 

@@ -2,34 +2,42 @@
 
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
+import { useState, useEffect } from 'react'
 import {
   FolderOpen, CheckCircle, TrendingUp, FileText,
-  Upload, ArrowRight, Clock, Plus, BarChart3,
+  Upload, ArrowRight, Clock, Plus,
 } from 'lucide-react'
 import { projectsApi, reportsApi } from '@/lib/api'
 import { formatDate, formatRelativeTime, formatCurrency } from '@/lib/utils'
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Cell,
-} from 'recharts'
 
 const cardVariants = {
   hidden: { opacity: 0, y: 20 },
   visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.08, duration: 0.4 } }),
 }
 
-const activityData = [
-  { day: 'Mon', estimates: 3 },
-  { day: 'Tue', estimates: 7 },
-  { day: 'Wed', estimates: 5 },
-  { day: 'Thu', estimates: 9 },
-  { day: 'Fri', estimates: 6 },
-  { day: 'Sat', estimates: 2 },
-  { day: 'Sun', estimates: 4 },
-]
+// ── Load demo data from localStorage ──────────────────────────────────────────
+function getDemoProjects() {
+  if (typeof window === 'undefined') return []
+  try { return JSON.parse(localStorage.getItem('bw_demo_projects') || '[]') } catch { return [] }
+}
+
+function getDemoReports() {
+  if (typeof window === 'undefined') return []
+  try { return JSON.parse(localStorage.getItem('bw_demo_reports') || '[]') } catch { return [] }
+}
 
 export default function DashboardPage() {
+  const router = useRouter()
+  const [demoProjects, setDemoProjects] = useState<any[]>([])
+  const [demoReports, setDemoReports] = useState<any[]>([])
+
+  useEffect(() => {
+    setDemoProjects(getDemoProjects())
+    setDemoReports(getDemoReports())
+  }, [])
+
   const { data: projectsData, isLoading: projectsLoading } = useQuery({
     queryKey: ['projects', { limit: 5 }],
     queryFn: () => projectsApi.list({ limit: 5 }).then((r) => r.data).catch(() => ({ items: [], total: 0 })),
@@ -42,17 +50,44 @@ export default function DashboardPage() {
     retry: false,
   })
 
-  const projects = projectsData?.items ?? []
-  const reports = reportsData?.items ?? []
-  const totalProjects = projectsData?.total ?? 0
+  // Merge backend + demo data
+  const backendProjects: any[] = projectsData?.items ?? []
+  const projects = [
+    ...backendProjects,
+    ...demoProjects.filter((dp) => !backendProjects.find((bp) => bp.id === dp.id)),
+  ].slice(0, 5)
+
+  const backendReports: any[] = reportsData?.items ?? []
+  const reports = [
+    ...backendReports,
+    ...demoReports.filter((dr) => !backendReports.find((br) => br.id === dr.id)),
+  ].slice(0, 3)
+
+  const totalProjects = projects.length
   const completedEstimates = projects.filter((p: any) => p.status === 'completed').length
-  const savedReports = reportsData?.total ?? 0
+  const savedReports = reports.length
 
   const stats = [
-    { label: 'Total Projects', value: totalProjects, icon: FolderOpen, color: 'text-violet-500', bg: 'bg-violet-500/10', delta: '+3 this week' },
-    { label: 'Completed Estimates', value: completedEstimates, icon: CheckCircle, color: 'text-emerald-500', bg: 'bg-emerald-500/10', delta: 'All up to date' },
-    { label: "Today's Estimates", value: 2, icon: TrendingUp, color: 'text-amber-500', bg: 'bg-amber-500/10', delta: '+1 from yesterday' },
-    { label: 'Saved Reports', value: savedReports, icon: FileText, color: 'text-sky-500', bg: 'bg-sky-500/10', delta: 'Ready to download' },
+    {
+      label: 'Total Projects', value: totalProjects,
+      icon: FolderOpen, color: 'text-violet-500', bg: 'bg-violet-500/10',
+      delta: `${totalProjects} total`, href: '/projects',
+    },
+    {
+      label: 'Completed Estimates', value: completedEstimates,
+      icon: CheckCircle, color: 'text-emerald-500', bg: 'bg-emerald-500/10',
+      delta: 'All up to date', href: '/projects',
+    },
+    {
+      label: "Today's Estimates", value: 2,
+      icon: TrendingUp, color: 'text-amber-500', bg: 'bg-amber-500/10',
+      delta: '+1 from yesterday', href: '/projects',
+    },
+    {
+      label: 'Saved Reports', value: savedReports,
+      icon: FileText, color: 'text-sky-500', bg: 'bg-sky-500/10',
+      delta: 'Ready to download', href: '/reports',
+    },
   ]
 
   return (
@@ -65,32 +100,34 @@ export default function DashboardPage() {
         </p>
       </motion.div>
 
-      {/* Stats Grid */}
+      {/* Stats Grid — each card is clickable and routes to the right tab */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         {stats.map((stat, i) => (
-          <motion.div
+          <motion.button
             key={stat.label}
             custom={i}
             initial="hidden"
             animate="visible"
             variants={cardVariants}
-            className="bg-white dark:bg-[#1E1E24] rounded-[20px] p-5 border border-black/[0.06] dark:border-white/[0.06] hover:border-violet-500/20 transition-all"
+            onClick={() => router.push(stat.href)}
+            className="text-left bg-white dark:bg-[#1E1E24] rounded-[20px] p-5 border border-black/[0.06] dark:border-white/[0.06] hover:border-violet-500/30 hover:shadow-lg hover:shadow-violet-500/5 transition-all cursor-pointer group"
           >
             <div className="flex items-start justify-between mb-4">
               <div className={`w-10 h-10 rounded-2xl ${stat.bg} flex items-center justify-center`}>
                 <stat.icon className={`w-5 h-5 ${stat.color}`} />
               </div>
+              <ArrowRight className="w-4 h-4 text-black/15 dark:text-white/10 group-hover:text-violet-500 transition-colors" />
             </div>
             <div className="text-3xl font-black tracking-tight mb-1">
               {projectsLoading ? <div className="w-12 h-8 skeleton rounded-lg" /> : stat.value}
             </div>
             <p className="text-[12.5px] text-black/45 dark:text-white/35">{stat.label}</p>
             <p className="text-[11.5px] text-emerald-500 mt-1 font-medium">{stat.delta}</p>
-          </motion.div>
+          </motion.button>
         ))}
       </div>
 
-      {/* Main grid */}
+      {/* Main grid — 2 columns: Recent Projects + Recent Reports */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Recent Projects */}
         <div className="xl:col-span-2 bg-white dark:bg-[#1E1E24] rounded-[20px] border border-black/[0.06] dark:border-white/[0.06] p-5">
@@ -151,71 +188,42 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Right column */}
-        <div className="space-y-5">
-          {/* Quick Upload */}
-          <div className="bg-violet-600 rounded-[20px] p-5 text-white relative overflow-hidden">
-            <div className="absolute -right-6 -top-6 w-24 h-24 bg-white/10 rounded-full" />
-            <div className="absolute -right-2 top-8 w-14 h-14 bg-white/5 rounded-full" />
-            <Upload className="w-7 h-7 mb-4 relative z-10" />
-            <h3 className="font-bold text-[15px] mb-1 relative z-10">Quick Upload</h3>
-            <p className="text-[13px] text-white/70 mb-4 relative z-10">
-              Drop a plan and get an instant estimate in minutes.
-            </p>
-            <Link
-              href="/upload"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-violet-600 text-[13px] font-bold hover:bg-white/90 transition-all relative z-10"
-            >
-              Upload Now <ArrowRight className="w-3.5 h-3.5" />
+        {/* Recent Reports */}
+        <div className="bg-white dark:bg-[#1E1E24] rounded-[20px] border border-black/[0.06] dark:border-white/[0.06] p-5 flex flex-col">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-[15px]">Recent Reports</h3>
+            <Link href="/reports" className="text-[12px] text-violet-500 font-semibold hover:underline">
+              View all
             </Link>
           </div>
 
-          {/* Weekly Activity */}
-          <div className="bg-white dark:bg-[#1E1E24] rounded-[20px] border border-black/[0.06] dark:border-white/[0.06] p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <BarChart3 className="w-4 h-4 text-black/40 dark:text-white/30" />
-              <h3 className="font-bold text-[14px]">Weekly Activity</h3>
+          {reports.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center py-10 text-center">
+              <FileText className="w-10 h-10 text-black/12 dark:text-white/10 mb-3" />
+              <p className="text-[13px] font-semibold text-black/35 dark:text-white/25">No reports yet</p>
+              <p className="text-[12px] text-black/25 dark:text-white/15 mt-1">
+                Generate a report from an estimation result
+              </p>
             </div>
-            <ResponsiveContainer width="100%" height={100}>
-              <BarChart data={activityData} barSize={8}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" />
-                <XAxis dataKey="day" tick={{ fontSize: 10, fill: 'rgba(0,0,0,0.35)' }} axisLine={false} tickLine={false} />
-                <YAxis hide />
-                <Tooltip
-                  contentStyle={{ background: '#1E1E24', border: 'none', borderRadius: 12, fontSize: 12 }}
-                  cursor={{ fill: 'rgba(124,58,237,0.05)' }}
-                />
-                <Bar dataKey="estimates" radius={[4, 4, 0, 0]}>
-                  {activityData.map((_, i) => (
-                    <Cell key={i} fill={i === 3 ? '#7C3AED' : 'rgba(124,58,237,0.2)'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Recent Reports */}
-          <div className="bg-white dark:bg-[#1E1E24] rounded-[20px] border border-black/[0.06] dark:border-white/[0.06] p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-[14px]">Recent Reports</h3>
-              <Link href="/reports" className="text-[12px] text-violet-500 hover:underline">All</Link>
-            </div>
-            {reports.length === 0 ? (
-              <p className="text-[12.5px] text-black/30 dark:text-white/20 py-4 text-center">No reports yet</p>
-            ) : (
-              <div className="space-y-2">
-                {reports.map((r: any) => (
-                  <div key={r.id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-black/[0.03] dark:hover:bg-white/[0.03] transition-all cursor-pointer">
-                    <FileText className="w-4 h-4 text-violet-500 flex-shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[12.5px] font-medium truncate">{r.title}</p>
-                      <p className="text-[11px] text-black/30 dark:text-white/20">{formatDate(r.created_at)}</p>
-                    </div>
+          ) : (
+            <div className="space-y-2">
+              {reports.map((r: any) => (
+                <Link
+                  key={r.id}
+                  href="/reports"
+                  className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-black/[0.03] dark:hover:bg-white/[0.03] transition-all"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-violet-500/10 flex items-center justify-center flex-shrink-0">
+                    <FileText className="w-4 h-4 text-violet-500" />
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[12.5px] font-semibold truncate">{r.title}</p>
+                    <p className="text-[11px] text-black/30 dark:text-white/20">{formatDate(r.created_at)}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

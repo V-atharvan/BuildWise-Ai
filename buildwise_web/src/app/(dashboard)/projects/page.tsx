@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus, Search, Filter, Grid3X3, List, Star, Archive,
@@ -45,7 +46,33 @@ export default function ProjectsPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [page, setPage] = useState(0)
+  const [demoProjects, setDemoProjects] = useState<any[]>([])
   const limit = 12
+  const router = useRouter()
+
+  function createDemoProject(name: string, buildingType: string, description?: string) {
+    const p = {
+      id: `demo_proj_${Date.now()}`,
+      name,
+      building_type: buildingType,
+      description: description || '',
+      status: 'draft',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+    try {
+      const existing = JSON.parse(localStorage.getItem('bw_demo_projects') || '[]')
+      localStorage.setItem('bw_demo_projects', JSON.stringify([...existing, p]))
+    } catch { /* ignore */ }
+    return p
+  }
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('bw_demo_projects') || '[]')
+      setDemoProjects(stored)
+    } catch { /* ignore */ }
+  }, [])
 
   const { data, isLoading } = useQuery({
     queryKey: ['projects', { search, filterType, filterStatus, page }],
@@ -61,8 +88,21 @@ export default function ProjectsPage() {
   })
 
   const createMutation = useMutation({
-    mutationFn: (d: CreateForm) => projectsApi.create(d),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['projects'] }); setShowCreate(false); reset() },
+    mutationFn: async (d: CreateForm) => {
+      try {
+        const res = await projectsApi.create(d)
+        return { id: res.data.id }
+      } catch (err) {
+        const p = createDemoProject(d.name, d.building_type, d.description)
+        return { id: p.id }
+      }
+    },
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ['projects'] })
+      setShowCreate(false)
+      reset()
+      router.push(`/upload?project_id=${result.id}`)
+    },
   })
 
   const deleteMutation = useMutation({
@@ -85,8 +125,17 @@ export default function ProjectsPage() {
     defaultValues: { building_type: 'house' },
   })
 
-  const projects = data?.items ?? []
-  const total = data?.total ?? 0
+  const backendProjects: any[] = data?.items ?? []
+  const projects = [
+    ...backendProjects,
+    ...demoProjects.filter((dp) => !backendProjects.find((bp) => bp.id === dp.id)),
+  ].filter((p) => {
+    if (search && !p.name?.toLowerCase().includes(search.toLowerCase())) return false
+    if (filterType && p.building_type !== filterType) return false
+    if (filterStatus && p.status !== filterStatus) return false
+    return true
+  })
+  const total = projects.length
 
   return (
     <div className="space-y-6">
