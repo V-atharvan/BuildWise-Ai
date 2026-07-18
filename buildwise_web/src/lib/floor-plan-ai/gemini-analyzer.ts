@@ -501,7 +501,8 @@ export async function validateGeminiKey(apiKey: string, model: GeminiModel = 'ge
 export function getGeminiApiKey(): string {
   if (typeof window === 'undefined') return ''
   return localStorage.getItem('bw_gemini_key') ||
-    (process.env.NEXT_PUBLIC_GEMINI_API_KEY ?? '')
+    process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
+    ''
 }
 
 export function setGeminiApiKey(key: string): void {

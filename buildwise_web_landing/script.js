@@ -36,39 +36,41 @@ themeBtn.addEventListener('click', () => {
   localStorage.setItem('bw-theme', isDark ? 'light' : 'dark');
 });
 
-// ── Pricing billing toggle
+// ── Pricing billing toggle (if present)
 const billingToggle = document.getElementById('billingToggle');
 const billingMonthly = document.getElementById('billingMonthly');
 const billingAnnual = document.getElementById('billingAnnual');
 const priceAmounts = document.querySelectorAll('.price-amount');
 
-billingToggle.addEventListener('change', () => {
-  const isAnnual = billingToggle.checked;
-  billingMonthly.classList.toggle('active', !isAnnual);
-  billingAnnual.classList.toggle('active', isAnnual);
-  priceAmounts.forEach(el => {
-    const value = isAnnual ? el.dataset.annual : el.dataset.monthly;
-    // Animate counter
-    animateCounter(el, parseInt(value.replace(',', '')));
+if (billingToggle) {
+  billingToggle.addEventListener('change', () => {
+    const isAnnual = billingToggle.checked;
+    billingMonthly.classList.toggle('active', !isAnnual);
+    billingAnnual.classList.toggle('active', isAnnual);
+    priceAmounts.forEach(el => {
+      const value = isAnnual ? el.dataset.annual : el.dataset.monthly;
+      // Animate counter
+      animateCounter(el, parseInt(value.replace(',', '')));
+    });
   });
-});
 
-function animateCounter(el, target) {
-  const start = parseInt(el.textContent.replace(/,/g, '')) || 0;
-  const duration = 500;
-  const step = (timestamp) => {
-    if (!start) {
-      el.textContent = target === 0 ? '0' : target.toLocaleString('en-IN');
-      return;
-    }
-    const progress = Math.min((timestamp - startTime) / duration, 1);
-    const eased = 1 - Math.pow(1 - progress, 3);
-    const current = Math.round(start + (target - start) * eased);
-    el.textContent = current.toLocaleString('en-IN');
-    if (progress < 1) requestAnimationFrame(step);
-  };
-  let startTime;
-  requestAnimationFrame((ts) => { startTime = ts; step(ts); });
+  function animateCounter(el, target) {
+    const start = parseInt(el.textContent.replace(/,/g, '')) || 0;
+    const duration = 500;
+    const step = (timestamp) => {
+      if (!start) {
+        el.textContent = target === 0 ? '0' : target.toLocaleString('en-IN');
+        return;
+      }
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const current = Math.round(start + (target - start) * eased);
+      el.textContent = current.toLocaleString('en-IN');
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    let startTime;
+    requestAnimationFrame((ts) => { startTime = ts; step(ts); });
+  }
 }
 
 // ── Scroll animations (IntersectionObserver)

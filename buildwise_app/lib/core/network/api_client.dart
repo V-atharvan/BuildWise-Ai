@@ -1,4 +1,4 @@
-import 'package:dio/dio';
+import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'api_endpoints.dart';
 import 'api_interceptor.dart';

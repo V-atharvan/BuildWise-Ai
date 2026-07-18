@@ -68,4 +68,3 @@ class ProjectModel extends Equatable {
   @override
   List<Object?> get props => [id, name, buildingType, status, isFavorite, ownerId, createdAt, updatedAt];
 }
- postseason:

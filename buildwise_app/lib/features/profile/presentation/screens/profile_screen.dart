@@ -8,7 +8,7 @@ import '../../../../core/widgets/buildwise_button.dart';
 import '../../../../core/widgets/buildwise_card.dart';
 import '../../../../core/widgets/buildwise_snackbar.dart';
 import '../../../../core/providers/theme_provider.dart';
-import '../../auth/presentation/providers/auth_notifier.dart';
+import '../../../auth/presentation/providers/auth_notifier.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});

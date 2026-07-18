@@ -1,12 +1,7 @@
 import { saveAs } from 'file-saver'
 import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
-import 'jspdf-autotable'
-
-// Extend jsPDF interface to include autoTable method dynamically
-interface jsPDFWithAutoTable extends jsPDF {
-  autoTable: (options: any) => jsPDF
-}
+import autoTable from 'jspdf-autotable'
 
 export interface BOQItem {
   srNo: number
@@ -142,7 +137,7 @@ export function exportToCSV(estimation: any, projectName: string) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 export function exportToPDF(estimation: any, projectName: string) {
-  const doc = new jsPDF() as jsPDFWithAutoTable
+  const doc = new jsPDF()
   const items = generateBOQItems(estimation)
   const c = estimation.cost_breakdown || estimation.cost || {}
 
@@ -171,7 +166,7 @@ export function exportToPDF(estimation: any, projectName: string) {
     i.amount.toLocaleString('en-IN')
   ])
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: 42,
     head: [columns],
     body: rows,

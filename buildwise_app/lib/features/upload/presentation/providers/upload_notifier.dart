@@ -1,9 +1,9 @@
 import 'dart:io';
-import 'package:dio/dio';
+import 'package:dio/dio.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_endpoints.dart';
-import '../domain/plan_model.dart';
+import '../../domain/plan_model.dart';
 
 class UploadState {
   final PlanModel? plan;

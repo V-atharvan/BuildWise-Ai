@@ -16,7 +16,7 @@ from typing import Dict, Any, Optional, List, Tuple
 
 
 class ScaleDetector:
-    """Multi-method drawing scale detection and calibration."""
+    """Multi-source scale consensus solver for floor plan calibration."""
 
     # Default scale if all detection methods fail
     DEFAULT_SCALE = 0.015  # meters per pixel (roughly works for 300 DPI at 1:100)
@@ -35,49 +35,41 @@ class ScaleDetector:
         user_scale: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
-        Detect or calculate the drawing scale factor (meters per pixel).
-
-        Args:
-            ocr_data: Output from OcrReader.extract()
-            rooms: List of room candidates from RoomExtractor
-            doors: List of detected doors (from furniture detector)
-            image_dimensions: (width, height) of the processed image
-            user_scale: Optional user-specified scale override
-
-        Returns:
-            Dict with scale_factor, method used, confidence, and calibration details.
+        Consensus-driven drawing scale factor calculation (meters per pixel).
+        Collects candidates, groups them by similarity (5% tolerance),
+        and returns the consensus or raises a validation warning/error on conflict.
         """
-        results = []
-
-        # ── Method 0: User override (highest priority) ───────────────────
+        # ── Method 1: User override (highest priority, return immediately) ──
         if user_scale and user_scale > 0:
             return {
-                "scale_factor": user_scale,
+                "scale_factor": float(user_scale),
                 "method": "user_override",
                 "confidence": 1.0,
+                "status": "success",
                 "details": {"user_specified": user_scale},
             }
 
-        # ── Method 1: OCR-based scale text ───────────────────────────────
+        candidates = []
+
+        # ── Method 2: OCR-based scale text ───────────────────────────────
         scale_info = ocr_data.get("scale_info")
         if scale_info:
             ratio = scale_info.get("ratio", 100)
             m_per_px = scale_info.get("m_per_px_at_300dpi", ScaleDetector.DEFAULT_SCALE)
 
-            # Adjust for actual image DPI if available
+            # Adjust for actual image DPI if dimensions are known
             if image_dimensions:
-                # Heuristic: if image is very large (>4000px), likely higher DPI
                 max_dim = max(image_dimensions)
                 if max_dim > 5000:
                     dpi_factor = 300 / 150  # Assume 150 DPI scan
-                elif max_dim > 3000:
+                elif max_dim >= 2000:
                     dpi_factor = 1.0  # Assume 300 DPI
                 else:
                     dpi_factor = 300 / 72  # Assume screen resolution
                 m_per_px *= (1 / dpi_factor) if dpi_factor != 0 else 1.0
 
-            results.append({
-                "scale_factor": m_per_px,
+            candidates.append({
+                "scale_factor": float(m_per_px),
                 "method": "ocr_scale_text",
                 "confidence": 0.90,
                 "details": {
@@ -86,171 +78,180 @@ class ScaleDetector:
                 },
             })
 
-        # ── Method 2: Dimension calibration ──────────────────────────────
+        # ── Method 3: Room Dimension calibration (robust multi-room check) ──
         dimensions = ocr_data.get("parsed_dimensions", [])
         if dimensions and rooms:
-            calibration = ScaleDetector._calibrate_from_dimensions(dimensions, rooms)
-            if calibration:
-                results.append(calibration)
+            for dim in dimensions:
+                room_id = dim.get("room_id")
+                if not room_id:
+                    continue
 
-        # ── Method 3: Area label calibration ─────────────────────────────
+                target_room = next((r for r in rooms if r.get("id") == room_id), None)
+                if not target_room:
+                    continue
+
+                bbox = target_room.get("bounding_box")
+                if not bbox or len(bbox) < 4:
+                    continue
+
+                room_width_px = bbox[2]
+                room_height_px = bbox[3]
+                if room_width_px <= 0 or room_height_px <= 0:
+                    continue
+
+                dim_w = dim.get("width_m", 0)
+                dim_h = dim.get("height_m", 0)
+                if dim_w <= 0 or dim_h <= 0:
+                    continue
+
+                # Check width-width/height-height vs width-height/height-width (aspect rotation)
+                s1_w = dim_w / room_width_px
+                s1_h = dim_h / room_height_px
+                dev1 = abs(s1_w - s1_h) / max(s1_w, s1_h)
+
+                s2_w = dim_w / room_height_px
+                s2_h = dim_h / room_width_px
+                dev2 = abs(s2_w - s2_h) / max(s2_w, s2_h)
+
+                if dev1 < dev2 and dev1 < 0.15:
+                    s_avg = (s1_w + s1_h) / 2
+                    candidates.append({
+                        "scale_factor": float(s_avg),
+                        "method": f"dimension_calibration_{room_id}",
+                        "confidence": 0.85,
+                        "details": {
+                            "room_id": room_id,
+                            "ocr_dimension": f"{dim_w}m x {dim_h}m",
+                            "room_size_px": f"{room_width_px} x {room_height_px}",
+                        },
+                    })
+                elif dev2 < 0.15:
+                    s_avg = (s2_w + s2_h) / 2
+                    candidates.append({
+                        "scale_factor": float(s_avg),
+                        "method": f"dimension_calibration_{room_id}",
+                        "confidence": 0.85,
+                        "details": {
+                            "room_id": room_id,
+                            "ocr_dimension": f"{dim_w}m x {dim_h}m",
+                            "room_size_px": f"{room_width_px} x {room_height_px}",
+                            "rotated": True,
+                        },
+                    })
+
+        # ── Method 4: Area label calibration ─────────────────────────────
         area_labels = ocr_data.get("area_labels", [])
         if area_labels and rooms:
-            area_cal = ScaleDetector._calibrate_from_area_labels(area_labels, rooms)
-            if area_cal:
-                results.append(area_cal)
+            for label in area_labels:
+                room_id = label.get("room_id")
+                if not room_id:
+                    continue
 
-        # ── Method 4: Door width heuristic ───────────────────────────────
+                target_room = next((r for r in rooms if r.get("id") == room_id), None)
+                if not target_room:
+                    continue
+
+                area_m2 = label.get("area_m2", 0)
+                area_px2 = target_room.get("area_px2", 0)
+                if area_m2 > 0 and area_px2 > 0:
+                    scale = math.sqrt(area_m2 / area_px2)
+                    if 0.001 < scale < 0.1:
+                        candidates.append({
+                            "scale_factor": float(scale),
+                            "method": f"area_label_calibration_{room_id}",
+                            "confidence": 0.80,
+                            "details": {
+                                "room_id": room_id,
+                                "area_label": f"{area_m2} m²",
+                                "area_px2": area_px2,
+                            },
+                        })
+
+        # ── Method 5: Door width heuristic ───────────────────────────────
         if doors:
             door_cal = ScaleDetector._calibrate_from_doors(doors)
             if door_cal:
-                results.append(door_cal)
+                candidates.append(door_cal)
 
-        # ── Select best result ───────────────────────────────────────────
-        if results:
-            # Sort by confidence descending
-            results.sort(key=lambda r: r["confidence"], reverse=True)
-            best = results[0]
-
-            # Cross-validate: if multiple methods agree, boost confidence
-            if len(results) >= 2:
-                scales = [r["scale_factor"] for r in results]
-                mean_scale = sum(scales) / len(scales)
-                deviation = max(abs(s - mean_scale) / mean_scale for s in scales) if mean_scale > 0 else 1.0
-
-                if deviation < 0.2:  # Within 20% agreement
-                    best["confidence"] = min(0.98, best["confidence"] + 0.05)
-                    best["details"]["cross_validated"] = True
-                    best["details"]["methods_agree"] = len(results)
-
-            best["all_methods"] = results
-            return best
-
-        # ── Fallback ─────────────────────────────────────────────────────
-        return {
-            "scale_factor": ScaleDetector.DEFAULT_SCALE,
-            "method": "default_fallback",
-            "confidence": 0.30,
-            "details": {
-                "note": "No scale detection succeeded; using default 0.015 m/px"
-            },
-        }
-
-    @staticmethod
-    def _calibrate_from_dimensions(
-        dimensions: List[Dict[str, Any]],
-        rooms: List[Dict[str, Any]],
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Calibrate scale by matching OCR dimension text to room polygon size.
-        If OCR says "4.5m x 3.6m" and the room polygon is 300px x 240px,
-        then scale = 4.5/300 = 0.015 m/px.
-        """
-        for dim in dimensions:
-            room_id = dim.get("room_id")
-            if not room_id:
-                continue
-
-            # Find matching room
-            target_room = None
-            for room in rooms:
-                if room.get("id") == room_id:
-                    target_room = room
-                    break
-
-            if not target_room:
-                continue
-
-            # Get room bounding box dimensions in pixels
-            bbox = target_room.get("bounding_box")
-            if not bbox or len(bbox) < 4:
-                continue
-
-            room_width_px = bbox[2]  # width
-            room_height_px = bbox[3]  # height
-
-            if room_width_px <= 0 or room_height_px <= 0:
-                continue
-
-            dim_w = dim.get("width_m", 0)
-            dim_h = dim.get("height_m", 0)
-
-            if dim_w <= 0 or dim_h <= 0:
-                continue
-
-            # Calculate scale factors from both dimensions
-            # Try both orientations (dimension might not align with bbox)
-            scale_options = [
-                dim_w / room_width_px,
-                dim_h / room_height_px,
-                dim_w / room_height_px,
-                dim_h / room_width_px,
-            ]
-
-            # Filter reasonable scales (0.001 to 0.1 m/px)
-            valid_scales = [s for s in scale_options if 0.001 < s < 0.1]
-
-            if not valid_scales:
-                continue
-
-            # Pick the pair that gives most consistent results
-            best_scale = sum(valid_scales[:2]) / min(2, len(valid_scales))
-
+        # ── Scale Consensus Core Solver (5% tolerance grouping) ───────────
+        if not candidates:
+            # If no candidates at all, we return a fallback warning state
             return {
-                "scale_factor": best_scale,
-                "method": "dimension_calibration",
-                "confidence": 0.85,
-                "details": {
-                    "reference_room": room_id,
-                    "ocr_dimension": f"{dim_w}m x {dim_h}m",
-                    "room_size_px": f"{room_width_px} x {room_height_px}",
-                },
+                "scale_factor": ScaleDetector.DEFAULT_SCALE,
+                "method": "default_fallback",
+                "confidence": 0.10,
+                "status": "warning",
+                "error_code": "SCALE_NOT_FOUND",
+                "message": "No scale reference points (OCR texts, dimensions, doors) found in plan. Defaulting to 0.015 m/px.",
+                "all_methods": []
             }
 
-        return None
+        tolerance = 0.05
+        best_group = []
+        best_group_score = -1.0
 
-    @staticmethod
-    def _calibrate_from_area_labels(
-        area_labels: List[Dict[str, Any]],
-        rooms: List[Dict[str, Any]],
-    ) -> Optional[Dict[str, Any]]:
-        """Calibrate from area labels (e.g., '16.2 sq.m')."""
-        for label in area_labels:
-            room_id = label.get("room_id")
-            if not room_id:
+        for c1 in candidates:
+            group = [c1]
+            s1 = c1["scale_factor"]
+            for c2 in candidates:
+                if c1 is c2:
+                    continue
+                s2 = c2["scale_factor"]
+                diff = abs(s1 - s2) / min(s1, s2)
+                if diff <= tolerance:
+                    group.append(c2)
+
+            group_score = sum(c["confidence"] for c in group)
+            if group_score > best_group_score:
+                best_group_score = group_score
+                best_group = group
+
+        # Cross-validation and Conflict Detection
+        # Check if there are other candidate groups that significantly conflict (diff > 10% and high score)
+        conflicting_groups = []
+        for c1 in candidates:
+            if c1 in best_group:
                 continue
+            s1 = c1["scale_factor"]
+            # Find mean of best_group
+            best_group_mean = sum(c["scale_factor"] for c in best_group) / len(best_group)
+            diff_from_best = abs(s1 - best_group_mean) / min(s1, best_group_mean)
+            
+            if diff_from_best > 0.10: # >10% discrepancy
+                conflicting_groups.append(c1)
 
-            target_room = None
-            for room in rooms:
-                if room.get("id") == room_id:
-                    target_room = room
-                    break
+        # Calculate final consensus scale
+        total_weight = sum(c["confidence"] for c in best_group)
+        weighted_sum = sum(c["scale_factor"] * c["confidence"] for c in best_group)
+        consensus_scale = weighted_sum / total_weight
 
-            if not target_room:
-                continue
+        max_conf = max(c["confidence"] for c in best_group)
+        bonus = 0.05 * (len(best_group) - 1)
+        final_confidence = min(0.99, max_conf + bonus)
 
-            area_m2 = label.get("area_m2", 0)
-            area_px2 = target_room.get("area_px2", 0)
-
-            if area_m2 <= 0 or area_px2 <= 0:
-                continue
-
-            # scale² = area_m2 / area_px2
-            scale = math.sqrt(area_m2 / area_px2)
-
-            if 0.001 < scale < 0.1:
+        # If a conflict exists with a high confidence source, mark scale as inconsistent/unreliable
+        if conflicting_groups:
+            high_conf_conflict = any(c["confidence"] >= 0.80 for c in conflicting_groups)
+            if high_conf_conflict:
                 return {
-                    "scale_factor": scale,
-                    "method": "area_label_calibration",
-                    "confidence": 0.80,
-                    "details": {
-                        "reference_room": room_id,
-                        "area_label": f"{area_m2} m²",
-                        "area_px2": area_px2,
-                    },
+                    "scale_factor": float(consensus_scale),
+                    "method": best_group[0]["method"],
+                    "confidence": float(final_confidence * 0.5), # Penalize confidence
+                    "status": "error",
+                    "error_code": "SCALE_INCONSISTENT",
+                    "message": f"Conflict detected. Primary consensus scale is {consensus_scale:.6f} m/px, but other source indicates a significantly different scale.",
+                    "all_methods": candidates,
+                    "best_group": best_group,
                 }
 
-        return None
+        return {
+            "scale_factor": float(consensus_scale),
+            "method": best_group[0]["method"],
+            "confidence": float(final_confidence),
+            "status": "success",
+            "all_methods": candidates,
+            "best_group": best_group,
+        }
 
     @staticmethod
     def _calibrate_from_doors(
@@ -263,17 +264,14 @@ class ScaleDetector:
             box = door.get("box", door.get("bbox", []))
             if len(box) >= 4:
                 if isinstance(box[0], (list, tuple)):
-                    # [[x1,y1], [x2,y2], ...]
                     xs = [p[0] for p in box]
                     ys = [p[1] for p in box]
                     w = max(xs) - min(xs)
                     h = max(ys) - min(ys)
                 else:
-                    # [x1, y1, x2, y2]
                     w = abs(box[2] - box[0])
                     h = abs(box[3] - box[1])
 
-                # Door width is the smaller dimension
                 door_width = min(w, h)
                 if door_width > 10:  # Filter noise
                     door_widths_px.append(door_width)
@@ -287,7 +285,7 @@ class ScaleDetector:
 
         if 0.001 < scale < 0.1:
             return {
-                "scale_factor": scale,
+                "scale_factor": float(scale),
                 "method": "door_width_heuristic",
                 "confidence": 0.60,
                 "details": {
@@ -315,7 +313,6 @@ class ScaleDetector:
                 round(wl * scale_factor, 2)
                 for wl in room.get("wall_lengths_px", [])
             ]
-            # Also compute length/width from bounding box
             bbox = room.get("bounding_box", (0, 0, 0, 0))
             room["length_m"] = round(bbox[2] * scale_factor, 2)
             room["width_m"] = round(bbox[3] * scale_factor, 2)

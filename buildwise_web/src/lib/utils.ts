@@ -76,3 +76,20 @@ export const STEEL_GRADES = ['Fe415', 'Fe500', 'Fe500D', 'Fe550', 'Fe550D'] as c
 export const FOUNDATION_TYPES = ['isolated', 'combined', 'strip', 'raft', 'pile'] as const
 export const ROOF_TYPES = ['flat_rcc', 'sloped_rcc', 'truss', 'puf_panel'] as const
 export const BRICK_TYPES = ['red_brick', 'fly_ash', 'aac_block', 'concrete_block'] as const
+
+export function trackReportOpen(report: any): void {
+  if (typeof window === 'undefined') return
+  try {
+    const opened = JSON.parse(localStorage.getItem('bw_recently_opened_reports') || '[]')
+    const filtered = opened.filter((r: any) => r.id !== report.id)
+    filtered.unshift(report)
+    localStorage.setItem('bw_recently_opened_reports', JSON.stringify(filtered.slice(0, 5)))
+  } catch { /* ignore */ }
+}
+
+export function getRecentlyOpenedReports(): any[] {
+  if (typeof window === 'undefined') return []
+  try {
+    return JSON.parse(localStorage.getItem('bw_recently_opened_reports') || '[]')
+  } catch { return [] }
+}

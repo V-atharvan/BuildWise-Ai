@@ -7,7 +7,7 @@ import '../../../../core/constants/app_dimensions.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/constants/app_typography.dart';
 import '../../../../core/widgets/buildwise_loading.dart';
-import '../providers/upload_notifier.dart';
+import '../../../upload/presentation/providers/upload_notifier.dart';
 import 'detection_results_screen.dart';
 
 class _RealAnalysisScreen extends ConsumerStatefulWidget {

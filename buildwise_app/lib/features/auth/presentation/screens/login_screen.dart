@@ -9,7 +9,9 @@ import '../../../../core/widgets/buildwise_button.dart';
 import '../../../../core/widgets/buildwise_text_field.dart';
 import '../../../../core/widgets/buildwise_snackbar.dart';
 import '../../../../core/utils/validators.dart';
+import '../../domain/user_model.dart';
 import '../providers/auth_notifier.dart';
+
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});

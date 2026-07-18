@@ -1,6 +1,6 @@
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_endpoints.dart';
-import '../../dashboard/domain/project_model.dart';
+import '../../../dashboard/domain/project_model.dart';
 
 class ProjectsRepository {
   final ApiClient _client;

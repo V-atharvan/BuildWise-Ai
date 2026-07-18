@@ -51,7 +51,7 @@ class AppTheme {
 
   // ─── Card Theme ─────────────────────────────────────────
 
-  static CardTheme cardThemeLight = CardTheme(
+  static CardThemeData cardThemeLight = CardThemeData(
     color: AppColors.lightCard,
     elevation: AppDimensions.elevationSm,
     shadowColor: AppColors.shadowLight,
@@ -61,7 +61,7 @@ class AppTheme {
     margin: EdgeInsets.zero,
   );
 
-  static CardTheme cardThemeDark = CardTheme(
+  static CardThemeData cardThemeDark = CardThemeData(
     color: AppColors.darkCard,
     elevation: AppDimensions.elevationXs,
     shadowColor: Colors.black26,

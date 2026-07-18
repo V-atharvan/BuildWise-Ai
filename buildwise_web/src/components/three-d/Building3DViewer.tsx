@@ -2,7 +2,7 @@
 
 import { useRef, useState, useMemo, useCallback, useEffect } from 'react'
 import { Canvas, useFrame, useThree, ThreeEvent } from '@react-three/fiber'
-import { OrbitControls, Text, Grid, PerspectiveCamera, Html } from '@react-three/drei'
+import { OrbitControls, Text, Grid, PerspectiveCamera, Html, Billboard } from '@react-three/drei'
 import * as THREE from 'three'
 import {
   Eye, EyeOff, Box, Layers, RotateCcw, DoorOpen, AppWindow,
@@ -86,8 +86,8 @@ function RoomMesh({
 
   const shape = useMemo(() => {
     const s = new THREE.Shape()
-    s.moveTo(poly[0][0], poly[0][1])
-    for (let i = 1; i < poly.length; i++) s.lineTo(poly[i][0], poly[i][1])
+    s.moveTo(poly[0][0], -poly[0][1])
+    for (let i = 1; i < poly.length; i++) s.lineTo(poly[i][0], -poly[i][1])
     s.closePath()
     return s
   }, [poly])
@@ -130,8 +130,8 @@ function RoomMesh({
         return (
           <mesh
             key={i}
-            position={[midX, floorHeight / 2, -midY]}
-            rotation={[0, -seg.angle, 0]}
+            position={[midX, floorHeight / 2, midY]}
+            rotation={[0, seg.angle, 0]}
             onClick={e => { e.stopPropagation(); onWallClick?.(room.id, i, seg.length, wallThickness) }}
           >
             <boxGeometry args={[seg.length, floorHeight, wallThickness]} />
@@ -157,14 +157,14 @@ function RoomMesh({
 
       {/* Room label */}
       {showLabels && (
-        <>
-          <Text position={[cx, floorHeight * 0.6, -cy]} fontSize={0.45} color={color} fontWeight={700} anchorX="center" anchorY="middle" outlineWidth={0.02} outlineColor="#FFFFFF">
+        <Billboard position={[cx, floorHeight * 0.5, cy]} follow={true}>
+          <Text position={[0, 0.12, 0]} fontSize={0.45} color={color} fontWeight={700} anchorX="center" anchorY="middle" outlineWidth={0.02} outlineColor="#FFFFFF">
             {room.label}
           </Text>
-          <Text position={[cx, floorHeight * 0.38, -cy]} fontSize={0.28} color="#888888" anchorX="center" anchorY="middle">
+          <Text position={[0, -0.18, 0]} fontSize={0.28} color="#888888" anchorX="center" anchorY="middle">
             {room.area_m2?.toFixed(1)} m²
           </Text>
-        </>
+        </Billboard>
       )}
 
       {/* Selection outline */}
@@ -190,7 +190,7 @@ function DoorMarker({ door, scaleFactor, floorHeight }: { door: Door3D; scaleFac
   const z = cz * scaleFactor
 
   return (
-    <group position={[x, 0, -z]}>
+    <group position={[x, 0, z]}>
       {/* Door opening indicator — thin colored plane */}
       <mesh position={[0, h / 2, 0]}>
         <boxGeometry args={[w, h, 0.02]} />
@@ -217,7 +217,7 @@ function WindowMarker({ window: win, scaleFactor, floorHeight }: { window: Windo
   const z = cz * scaleFactor
 
   return (
-    <group position={[x, sill, -z]}>
+    <group position={[x, sill, z]}>
       <mesh position={[0, h / 2, 0]}>
         <boxGeometry args={[w, h, 0.04]} />
         <meshStandardMaterial color="#93C5FD" transparent opacity={0.55} />
@@ -338,7 +338,7 @@ function Scene({
     if (poly?.length > 0) {
       const cx = poly.reduce((s: number, p: number[]) => s + p[0], 0) / poly.length
       const cy = poly.reduce((s: number, p: number[]) => s + p[1], 0) / poly.length
-      setCameraTarget(new THREE.Vector3(cx, 0, -cy))
+      setCameraTarget(new THREE.Vector3(cx, 0, cy))
     }
   }
 

@@ -6,7 +6,7 @@ import '../../../../core/constants/app_typography.dart';
 import '../../../../core/widgets/buildwise_button.dart';
 import '../../../../core/widgets/buildwise_card.dart';
 import '../../../../core/widgets/buildwise_text_field.dart';
-import '../../upload/domain/plan_model.dart';
+import '../../../upload/domain/plan_model.dart';
 import '../../../inputs/presentation/screens/building_type_screen.dart';
 
 class DetectionResultsScreen extends ConsumerStatefulWidget {

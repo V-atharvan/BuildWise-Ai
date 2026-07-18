@@ -2,7 +2,7 @@
 
 import { useRef, useState, useMemo } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { OrbitControls, Text, Grid, Environment, PerspectiveCamera } from '@react-three/drei'
+import { OrbitControls, Text, Grid, Environment, PerspectiveCamera, Billboard } from '@react-three/drei'
 import * as THREE from 'three'
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -182,9 +182,11 @@ function Room3D({ room, showDimensions }: { room: Room3DData; showDimensions: bo
             {H.toFixed(1)} m
           </Text>
           {/* Room name */}
-          <Text position={[0, H + 0.3, 0]} fontSize={0.3} color="#7C3AED" anchorX="center" fontWeight="bold">
-            {room.label}
-          </Text>
+          <Billboard position={[0, H + 0.3, 0]} follow={true}>
+            <Text fontSize={0.3} color="#7C3AED" anchorX="center" fontWeight="bold">
+              {room.label}
+            </Text>
+          </Billboard>
         </>
       )}
     </group>

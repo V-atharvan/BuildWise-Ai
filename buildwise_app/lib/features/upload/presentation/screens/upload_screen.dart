@@ -7,7 +7,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_typography.dart';
 import '../../../../core/widgets/buildwise_snackbar.dart';
 import '../../../../core/widgets/buildwise_loading.dart';
-import '../../projects/presentation/providers/projects_notifier.dart';
+import '../../../projects/presentation/providers/projects_notifier.dart';
 import '../providers/upload_notifier.dart';
 import '../../../analysis/presentation/screens/cv_analysis_screen.dart';
 

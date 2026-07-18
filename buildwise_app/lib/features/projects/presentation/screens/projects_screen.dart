@@ -33,25 +33,137 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
 
   void _showNewProjectDialog() {
     _nameController.clear();
-    BuildWiseDialog.show(
+    setState(() {
+      _selectedBuildingType = 'House';
+    });
+
+    showGeneralDialog(
       context: context,
-      title: 'New Project',
-      content: 'Enter details to start estimation.',
-      primaryLabel: 'Create',
-      onPrimaryPressed: () async {
-        final name = _nameController.text.trim();
-        if (name.isEmpty) {
-          BuildWiseSnackBar.showWarning(context, 'Project name is required');
-          return;
-        }
-        await ref.read(projectsNotifierProvider.notifier).createProject(name, _selectedBuildingType);
-        if (mounted) {
-          Navigator.pop(context);
-          BuildWiseSnackBar.showSuccess(context, 'Project created successfully');
-        }
-      },
-      secondaryLabel: 'Cancel',
       barrierDismissible: true,
+      barrierLabel: '',
+      barrierColor: AppColors.overlay,
+      transitionDuration: const Duration(milliseconds: AppDimensions.animNormal),
+      pageBuilder: (context, anim1, anim2) => const SizedBox.shrink(),
+      transitionBuilder: (context, anim, secondaryAnim, child) {
+        final scale = Tween<double>(begin: 0.9, end: 1.0).animate(
+          CurvedAnimation(parent: anim, curve: Curves.easeOutBack),
+        );
+        final opacity = Tween<double>(begin: 0.0, end: 1.0).animate(
+          CurvedAnimation(parent: anim, curve: Curves.easeIn),
+        );
+
+        return ScaleTransition(
+          scale: scale,
+          child: FadeTransition(
+            opacity: opacity,
+            child: StatefulBuilder(
+              builder: (context, setDialogState) {
+                final isDark = Theme.of(context).brightness == Brightness.dark;
+                return AlertDialog(
+                  backgroundColor: isDark ? AppColors.darkElevated : AppColors.lightSurface,
+                  surfaceTintColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppDimensions.radiusCard),
+                  ),
+                  contentPadding: const EdgeInsets.fromLTRB(
+                    AppDimensions.space24,
+                    AppDimensions.space24,
+                    AppDimensions.space24,
+                    AppDimensions.space20,
+                  ),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(AppDimensions.space16),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.architecture_rounded,
+                          size: AppDimensions.iconXxl,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      const SizedBox(height: AppDimensions.space20),
+                      Text(
+                        'New Project',
+                        style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: AppDimensions.space12),
+                      Text(
+                        'Enter details to start estimation.',
+                        style: AppTypography.bodyMedium.copyWith(
+                          color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: AppDimensions.space20),
+                      BuildWiseTextField(
+                        hint: 'Project Name',
+                        controller: _nameController,
+                        prefixIcon: Icons.business_outlined,
+                      ),
+                      const SizedBox(height: AppDimensions.space16),
+                      DropdownButtonFormField<String>(
+                        value: _selectedBuildingType,
+                        dropdownColor: isDark ? AppColors.darkElevated : AppColors.lightSurface,
+                        decoration: const InputDecoration(
+                          labelText: 'Building Type',
+                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(12)),
+                          ),
+                        ),
+                        items: ['House', 'Villa', 'Commercial'].map((t) {
+                          return DropdownMenuItem(value: t, child: Text(t));
+                        }).toList(),
+                        onChanged: (val) {
+                          setDialogState(() {
+                            _selectedBuildingType = val!;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: AppDimensions.space24),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: BuildWiseButton.secondary(
+                              label: 'Cancel',
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                          ),
+                          const SizedBox(width: AppDimensions.space12),
+                          Expanded(
+                            child: BuildWiseButton.primary(
+                              label: 'Create',
+                              onPressed: () async {
+                                final name = _nameController.text.trim();
+                                if (name.isEmpty) {
+                                  BuildWiseSnackBar.showWarning(context, 'Project name is required');
+                                  return;
+                                }
+                                Navigator.pop(context);
+                                await ref.read(projectsNotifierProvider.notifier).createProject(name, _selectedBuildingType);
+                                if (context.mounted) {
+                                  BuildWiseSnackBar.showSuccess(context, 'Project created successfully');
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 

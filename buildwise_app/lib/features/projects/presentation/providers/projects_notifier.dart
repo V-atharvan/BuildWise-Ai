@@ -1,7 +1,7 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../../core/network/api_client.dart';
-import '../../dashboard/domain/project_model.dart';
-import '../data/projects_repository.dart';
+import '../../../dashboard/domain/project_model.dart';
+import '../../data/projects_repository.dart';
 
 final projectsRepositoryProvider = Provider<ProjectsRepository>((ref) {
   final client = ref.watch(apiClientProvider);

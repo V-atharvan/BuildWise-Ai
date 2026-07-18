@@ -153,32 +153,51 @@ export async function* runFloorPlanPipeline(
     return
   }
 
-  // Simulate step progression while Gemini processes (each ~2.5 seconds)
-  const stepDelay = 2500
+  // Await the Gemini result with active yielding for simulated UI step progression
+  let rawResponse: string | null = null
+  let geminiError: any = null
+
+  geminiPromise.then(
+    (res) => { rawResponse = res },
+    (err) => { geminiError = err }
+  )
+
   let stepIdx = 0
-  const animationInterval = setInterval(() => {
+  // Tick through Gemini steps sequentially every 2.5 seconds while waiting
+  while (rawResponse === null && geminiError === null) {
+    // Sleep in small 250ms chunks to respond immediately when Gemini finishes
+    for (let i = 0; i < 10; i++) {
+      if (rawResponse !== null || geminiError !== null) break
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+
+    if (rawResponse !== null || geminiError !== null) break
+
     if (stepIdx < geminiStepIds.length) {
       const currentId = geminiStepIds[stepIdx]
       const nextId = geminiStepIds[stepIdx + 1]
       markDone(currentId)
       if (nextId) setStep(nextId, 'running')
       stepIdx++
+      yield [...steps]
     }
-  }, stepDelay)
+  }
 
-  // Await the Gemini result
-  let rawResponse: string
-  try {
-    rawResponse = await geminiPromise
-    clearInterval(animationInterval)
-  } catch (err: any) {
-    clearInterval(animationInterval)
-    // Mark the currently running step as error
+  if (geminiError) {
     const runningStep = steps.find(s => s.status === 'running')
-    if (runningStep) markError(runningStep.id, err.message)
+    if (runningStep) markError(runningStep.id, geminiError.message || 'AI request failed')
     yield [...steps]
     return
   }
+
+  if (rawResponse === null) {
+    const runningStep = steps.find(s => s.status === 'running')
+    if (runningStep) markError(runningStep.id, 'No response received from Gemini API')
+    yield [...steps]
+    return
+  }
+
+  const finalResponse: string = rawResponse
 
   // Mark all gemini steps as done
   geminiStepIds.forEach(id => markDone(id))
@@ -187,7 +206,7 @@ export async function* runFloorPlanPipeline(
   // ── Parse Gemini Response ──────────────────────────────────────────────────
   let rawParsed
   try {
-    rawParsed = parseGeminiResponse(rawResponse)
+    rawParsed = parseGeminiResponse(finalResponse)
   } catch (err: any) {
     markError('confidence', `AI response parsing failed: ${err.message}`)
     yield [...steps]

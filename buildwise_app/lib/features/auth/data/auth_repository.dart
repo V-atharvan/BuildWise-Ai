@@ -56,6 +56,10 @@ class AuthRepository {
     return user;
   }
 
+  Future<void> saveSession(String token, UserModel user) async {
+    await _saveSession(token, user);
+  }
+
   Future<void> _saveSession(String token, UserModel user) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('access_token', token);

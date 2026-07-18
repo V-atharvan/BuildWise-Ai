@@ -1,4 +1,4 @@
-import 'package:dio/dio';
+import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// BuildWise AI — Auth Interceptor

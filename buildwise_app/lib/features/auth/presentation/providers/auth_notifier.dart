@@ -3,7 +3,32 @@ import '../../../../core/network/api_client.dart';
 import '../../data/auth_remote_source.dart';
 import '../../data/auth_repository.dart';
 import '../../domain/user_model.dart';
-import '../../../../core/providers/auth_provider.dart';
+
+class AuthState {
+  final UserModel? user;
+  final bool isLoading;
+  final String? errorMessage;
+
+  const AuthState({
+    this.user,
+    this.isLoading = false,
+    this.errorMessage,
+  });
+
+  AuthState copyWith({
+    UserModel? user,
+    bool? isLoading,
+    String? errorMessage,
+    bool clearUser = false,
+  }) {
+    return AuthState(
+      user: clearUser ? null : (user ?? this.user),
+      isLoading: isLoading ?? this.isLoading,
+      errorMessage: errorMessage ?? this.errorMessage,
+    );
+  }
+}
+
 
 final authRemoteSourceProvider = Provider<AuthRemoteSource>((ref) {
   final client = ref.watch(apiClientProvider);
@@ -74,10 +99,15 @@ class AppAuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  void setUser(UserModel user) async {
+    state = state.copyWith(user: user);
+    await _repository.saveSession('mock-token-123', user);
+  }
+
   Future<void> logout() async {
     state = state.copyWith(isLoading: true);
     await _repository.clearSession();
-    state = const AuthState(clearUser: true);
+    state = const AuthState();
   }
 }
 

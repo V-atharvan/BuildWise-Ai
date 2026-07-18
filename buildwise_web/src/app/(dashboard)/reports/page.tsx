@@ -3,8 +3,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { FileText, Download, Share2, Calendar, AlertTriangle, Search, Trash2 } from 'lucide-react'
-import { reportsApi } from '@/lib/api'
-import { formatDate } from '@/lib/utils'
+import { reportsApi, projectsApi } from '@/lib/api'
+import { formatDate, trackReportOpen } from '@/lib/utils'
 
 // ── Read demo reports AND demo estimations from localStorage ──────────────────
 function buildDemoReports(): any[] {
@@ -44,11 +44,15 @@ function buildDemoReports(): any[] {
 
 export default function ReportsPage() {
   const [demoReports, setDemoReports] = useState<any[]>([])
+  const [demoProjects, setDemoProjects] = useState<any[]>([])
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('newest')
 
   useEffect(() => {
     setDemoReports(buildDemoReports())
+    try {
+      setDemoProjects(JSON.parse(localStorage.getItem('bw_demo_projects') || '[]'))
+    } catch { /* ignore */ }
   }, [])
 
   const { data: reportsData, isLoading } = useQuery({
@@ -57,11 +61,24 @@ export default function ReportsPage() {
     retry: false,
   })
 
+  const { data: projectsData } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => projectsApi.list().then((r) => r.data).catch(() => ({ items: [], total: 0 })),
+    retry: false,
+  })
+
+  const backendProjects: any[] = projectsData?.items ?? []
+  const allProjects = [
+    ...backendProjects,
+    ...demoProjects.filter(dp => !backendProjects.find(bp => bp.id === dp.id))
+  ]
+  const projectIds = new Set(allProjects.map(p => p.id))
+
   const backendReports: any[] = reportsData?.items ?? []
   const allReports = [
     ...backendReports,
     ...demoReports.filter(dr => !backendReports.find(br => br.id === dr.id)),
-  ]
+  ].filter(r => r.project_id && projectIds.has(r.project_id))
 
   // Filter & Sort
   const filteredReports = allReports
@@ -106,6 +123,10 @@ export default function ReportsPage() {
   }
 
   const handleDownload = async (reportId: string, filename: string) => {
+    const reportObj = allReports.find(r => r.id === reportId)
+    if (reportObj) {
+      trackReportOpen(reportObj)
+    }
     try {
       const res = await reportsApi.download(reportId)
       const url = window.URL.createObjectURL(new Blob([res.data]))
@@ -201,6 +222,7 @@ export default function ReportsPage() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => {
+                    trackReportOpen(report)
                     const url = report.estimation_id
                       ? `${window.location.origin}/estimate/${report.project_id}?estimation_id=${report.estimation_id}`
                       : `${window.location.origin}/estimate/${report.project_id}`

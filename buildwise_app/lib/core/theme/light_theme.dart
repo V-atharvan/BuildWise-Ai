@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import '../constants/app_colors.dart';
 import 'app_theme.dart';
 
@@ -66,7 +67,7 @@ class LightTheme {
         dividerTheme: AppTheme.dividerThemeLight,
 
         // Dialog
-        dialogTheme: DialogTheme(
+        dialogTheme: DialogThemeData(
           backgroundColor: AppColors.lightSurface,
           elevation: 8,
           shape: RoundedRectangleBorder(
@@ -136,7 +137,7 @@ class LightTheme {
         ),
 
         // Tab Bar
-        tabBarTheme: TabBarTheme(
+        tabBarTheme: TabBarThemeData(
           labelColor: AppColors.primary,
           unselectedLabelColor: AppColors.lightTextTertiary,
           labelStyle: AppTheme.textThemeLight.labelLarge,

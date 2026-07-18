@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 /// BuildWise AI — Extensions
 extension BuildWiseContext on BuildContext {
-  ThemeData get theme => Theme.of(context);
+  ThemeData get theme => Theme.of(this);
   ColorScheme get colors => theme.colorScheme;
   TextTheme get textTheme => theme.textTheme;
   bool get isDarkMode => theme.brightness == Brightness.dark;

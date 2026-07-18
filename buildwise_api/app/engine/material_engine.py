@@ -73,25 +73,64 @@ class MaterialEngine:
         # ── Room data (if provided by AI detection) ───────────────────────────
         rooms = params.get("rooms", [])
 
-        # ── 1. GEOMETRY ────────────────────────────────────────────────────────
-        area_m2 = GeometryCalculator.sqft_to_m2(total_area_sqft)
+        # ── 1. GEOMETRY & MASONRY VOLUME ──────────────────────────────────────
+        # Calculate carpet area by summing up detected room areas if available
+        detected_carpet_m2 = sum(r.get("area_m2") or r.get("area", 0.0) for r in rooms)
+        
+        if detected_carpet_m2 > 0:
+            carpet_area_m2 = detected_carpet_m2
+            detected_wall_len = float(params.get("wall_length_m") or 0.0)
+            if detected_wall_len > 0:
+                wall_footprint_m2 = detected_wall_len * wall_thickness_m
+            else:
+                wall_footprint_m2 = carpet_area_m2 * 0.15 # 15% wall ratio rule of thumb
+            area_m2 = carpet_area_m2 + wall_footprint_m2
+            total_area_sqft = area_m2 * 10.764
+        else:
+            area_m2 = GeometryCalculator.sqft_to_m2(total_area_sqft)
+            wall_footprint_m2 = area_m2 * 0.15
+            carpet_area_m2 = area_m2 - wall_footprint_m2
 
+        # Determine wall length for volume calculations
+        detected_wall_len = float(params.get("wall_length_m") or 0.0)
+        if detected_wall_len > 0:
+            wall_length_for_vol = detected_wall_len
+            perimeter_m = float(params.get("perimeter_m") or params.get("perimeter") or GeometryCalculator.estimate_perimeter(area_m2))
+        else:
+            perimeter_m = GeometryCalculator.estimate_perimeter(area_m2)
+            wall_length_for_vol = perimeter_m * 1.8 # Estimate internal + external walls
+
+        raw_wall_volume_m3 = wall_length_for_vol * floor_height_m * wall_thickness_m * floors
+        
+        # Deduct openings based on door/window count
+        doors_count = int(params.get("doors_count") or params.get("door_count") or (floors * 5))
+        windows_count = int(params.get("windows_count") or params.get("window_count") or (floors * 6))
+        door_deduction_vol = doors_count * (0.9 * 2.1 * wall_thickness_m) # 0.9m x 2.1m standard door
+        window_deduction_vol = windows_count * (1.2 * 1.2 * wall_thickness_m) # 1.2m x 1.2m standard window
+        
+        total_deduction_vol = door_deduction_vol + window_deduction_vol
+        max_deduction = raw_wall_volume_m3 * 0.25 # Max 25% deduction cap
+        deduction_vol = min(total_deduction_vol, max_deduction) if total_deduction_vol > 0 else (raw_wall_volume_m3 * 0.10)
+        
+        wall_volume_m3 = max(0.0, raw_wall_volume_m3 - deduction_vol)
+
+        # Length and Width for reference
         length = math.sqrt(area_m2) * 1.25 if area_m2 > 0 else 0.0
         width = area_m2 / length if length > 0 else 0.0
-        perimeter_m = GeometryCalculator.estimate_perimeter(area_m2)
-
-        wall_volume_m3 = GeometryCalculator.calculate_wall_volume(
-            perimeter_m=perimeter_m,
-            floor_height_m=floor_height_m,
-            wall_thickness_m=wall_thickness_m,
-            floors=floors,
-            deduction_pct=10.0
-        )
 
         # ── 2. RCC (CONCRETE) ──────────────────────────────────────────────────
+        column_count = int(params.get("column_count") or max(4, int(area_m2 / 15)))
+        beam_count = int(params.get("beam_count") or max(4, column_count + 2))
+        
+        # Slab Concrete volume
         slab_concrete = area_m2 * slab_thickness_m * floors
-        beam_concrete = slab_concrete * BEAM_FRACTION
-        column_concrete = slab_concrete * COLUMN_FRACTION
+        
+        # Column Concrete volume (Standard 300mm x 300mm columns)
+        column_concrete = column_count * (0.30 * 0.30 * floor_height_m) * floors
+        
+        # Beam Concrete volume (Standard 230mm x 450mm beams running along wall paths)
+        beam_concrete = wall_length_for_vol * (0.23 * 0.45) * floors
+        
         super_concrete = slab_concrete + beam_concrete + column_concrete
         found_coeff = FOUNDATION_FRACTION.get(foundation_type, 0.18)
         foundation_concrete = super_concrete * found_coeff

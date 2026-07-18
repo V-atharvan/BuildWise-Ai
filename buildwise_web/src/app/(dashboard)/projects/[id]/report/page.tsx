@@ -53,7 +53,6 @@ export default function ProjectReportPage() {
     version: 'V2.1.0',
     preparedBy: 'Quantity Surveyor (BuildWise AI Engine)',
   })
-  const [showMetadataEditor, setShowMetadataEditor] = useState(false)
 
   // ── Load all related project data ─────────────────────────────────────────
   useEffect(() => {
@@ -63,6 +62,21 @@ export default function ProjectReportPage() {
     const allProj = JSON.parse(localStorage.getItem('bw_demo_projects') || '[]')
     const currentProj = allProj.find((p: any) => p.id === projectId)
     setProject(currentProj || { name: 'BuildWise Takeoff Project', building_type: 'house' })
+
+    if (currentProj) {
+      setMetadata({
+        clientName: currentProj.client_name || 'Omkar Koli',
+        contractorName: currentProj.contractor_name || 'BuildWise Infrastructure Ltd.',
+        architectName: currentProj.architect_name || 'Ar. Rajesh Mehta (AIA)',
+        engineerName: currentProj.engineer_name || 'Er. Sachin Patil (FIV)',
+        address: currentProj.address || 'Plot No. 45, Sector 4, Hinjewadi',
+        city: currentProj.city || 'Pune',
+        state: currentProj.state || 'Maharashtra',
+        country: currentProj.country || 'India',
+        version: 'V2.1.0',
+        preparedBy: currentProj.prepared_by || 'Quantity Surveyor (BuildWise AI Engine)',
+      })
+    }
 
     // 2. Get floor plan image
     setImageUrl(localStorage.getItem(`bw_demo_file_data_${projectId}`) || '')
@@ -450,12 +464,6 @@ export default function ProjectReportPage() {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowMetadataEditor(!showMetadataEditor)}
-              className="p-2 rounded-xl border border-black/[0.08] dark:border-white/[0.08] hover:bg-black/[0.03] dark:hover:bg-white/[0.03] text-[12.5px] font-semibold flex items-center gap-1.5"
-            >
-              <Settings className="w-4 h-4 text-violet-500" /> Edit Info
-            </button>
-            <button
               onClick={triggerExcelDownload}
               className="px-3.5 py-2 rounded-xl border border-black/[0.08] dark:border-white/[0.08] hover:bg-black/[0.03] dark:hover:bg-white/[0.03] text-[12.5px] font-bold flex items-center gap-1.5"
             >
@@ -476,43 +484,6 @@ export default function ProjectReportPage() {
           </div>
         </div>
       </div>
-
-      {/* ── Metadata Editor Panel (Hidden on Print) ── */}
-      {showMetadataEditor && (
-        <div className="bg-white dark:bg-[#1E1E24] border-b border-black/[0.05] dark:border-white/[0.05] p-5 print:hidden transition-all shadow-inner">
-          <div className="max-w-[960px] mx-auto grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[
-              { label: 'Client Name', key: 'clientName' },
-              { label: 'Contractor Name', key: 'contractorName' },
-              { label: 'Architect Name', key: 'architectName' },
-              { label: 'Engineer Name', key: 'engineerName' },
-              { label: 'Project Address', key: 'address' },
-              { label: 'City', key: 'city' },
-              { label: 'State', key: 'state' },
-              { label: 'Country', key: 'country' },
-              { label: 'Prepared By', key: 'preparedBy' },
-            ].map(f => (
-              <div key={f.key}>
-                <label className="block text-[11px] font-bold uppercase text-black/40 dark:text-white/30 mb-1">{f.label}</label>
-                <input
-                  type="text"
-                  value={(metadata as any)[f.key]}
-                  onChange={e => setMetadata(prev => ({ ...prev, [f.key]: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-[#252530] border border-black/[0.08] dark:border-white/[0.08] text-[13px] focus:outline-none focus:border-violet-500"
-                />
-              </div>
-            ))}
-          </div>
-          <div className="max-w-[960px] mx-auto text-right mt-4 border-t border-black/[0.04] pt-3">
-            <button
-              onClick={() => setShowMetadataEditor(false)}
-              className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-[12px] font-bold"
-            >
-              Done Updating
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* ════════════════════════════════════════════════════════════════════════
           REPORT CONTENT (Styled like a formal QS take-off paper document)

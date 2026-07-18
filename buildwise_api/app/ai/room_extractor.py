@@ -58,6 +58,8 @@ class RoomExtractor:
     def extract(
         binary_image: np.ndarray,
         walls: Optional[List[Dict[str, Any]]] = None,
+        doors: Optional[List[Dict[str, Any]]] = None,
+        windows: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
         Run room extraction pipeline.
@@ -71,6 +73,8 @@ class RoomExtractor:
         Args:
             binary_image: Preprocessed binary image (walls = white/255)
             walls: Optional wall segments from WallDetector (for enhanced extraction)
+            doors: Optional door segment detections to seal wall boundaries
+            windows: Optional window segment detections to seal wall boundaries
 
         Returns:
             Dict with rooms list and extraction metadata.
@@ -80,10 +84,21 @@ class RoomExtractor:
         min_area = img_area * RoomExtractor.MIN_ROOM_AREA_FRACTION
         max_area = img_area * RoomExtractor.MAX_ROOM_AREA_FRACTION
 
+        # Create a sealed binary mask where doors and windows are closed
+        sealed_binary = binary_image.copy()
+        for door in (doors or []):
+            box = door.get("box", door.get("bbox", []))
+            if box and len(box) >= 4:
+                cv2.rectangle(sealed_binary, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), 255, -1)
+        for win in (windows or []):
+            box = win.get("box", win.get("bbox", []))
+            if box and len(box) >= 4:
+                cv2.rectangle(sealed_binary, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), 255, -1)
+
         # ── Strategy 1: Wall-mask based extraction ────────────────────────
         if walls:
             rooms_from_walls = RoomExtractor._extract_from_wall_mask(
-                binary_image, walls, min_area, max_area
+                sealed_binary, walls, min_area, max_area
             )
             if len(rooms_from_walls) >= 2:
                 # Assign IDs
@@ -99,7 +114,7 @@ class RoomExtractor:
 
         # ── Strategy 2: Contour-based extraction (primary) ───────────────
         rooms = RoomExtractor._extract_from_contours(
-            binary_image, min_area, max_area
+            sealed_binary, min_area, max_area
         )
 
         # Assign IDs

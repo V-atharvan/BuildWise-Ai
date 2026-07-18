@@ -20,6 +20,15 @@ const createSchema = z.object({
   name: z.string().min(2, 'Project name must be at least 2 characters'),
   description: z.string().optional(),
   building_type: z.string().min(1, 'Select a building type'),
+  client_name: z.string().optional(),
+  contractor_name: z.string().optional(),
+  architect_name: z.string().optional(),
+  engineer_name: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  country: z.string().optional(),
+  prepared_by: z.string().optional(),
 })
 type CreateForm = z.infer<typeof createSchema>
 
@@ -50,7 +59,7 @@ export default function ProjectsPage() {
   const limit = 12
   const router = useRouter()
 
-  function createDemoProject(name: string, buildingType: string, description?: string) {
+  function createDemoProject(name: string, buildingType: string, description?: string, metadata?: any) {
     const p = {
       id: `demo_proj_${Date.now()}`,
       name,
@@ -59,6 +68,7 @@ export default function ProjectsPage() {
       status: 'draft',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      ...metadata,
     }
     try {
       const existing = JSON.parse(localStorage.getItem('bw_demo_projects') || '[]')
@@ -93,7 +103,8 @@ export default function ProjectsPage() {
         const res = await projectsApi.create(d)
         return { id: res.data.id }
       } catch (err) {
-        const p = createDemoProject(d.name, d.building_type, d.description)
+        const { name, building_type, description, ...meta } = d
+        const p = createDemoProject(name, building_type, description, meta)
         return { id: p.id }
       }
     },
@@ -339,12 +350,12 @@ export default function ProjectsPage() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="w-full max-w-[480px] bg-white dark:bg-[#1E1E24] rounded-[24px] border border-black/[0.07] dark:border-white/[0.07] shadow-2xl p-7"
+              className="w-full max-w-[640px] max-h-[85vh] overflow-y-auto bg-white dark:bg-[#1E1E24] rounded-[24px] border border-black/[0.07] dark:border-white/[0.07] shadow-2xl p-7"
             >
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h3 className="text-xl font-black">New Project</h3>
-                  <p className="text-[13px] text-black/40 dark:text-white/30 mt-0.5">Fill in the basic details to create your project</p>
+                  <p className="text-[13px] text-black/40 dark:text-white/30 mt-0.5">Fill in the details to create your project</p>
                 </div>
                 <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition-colors">
                   <X className="w-5 h-5" />
@@ -352,26 +363,91 @@ export default function ProjectsPage() {
               </div>
 
               <form onSubmit={handleSubmit((d) => createMutation.mutate(d))} className="space-y-4">
-                <div>
-                  <label className="block text-[13px] font-semibold text-black/60 dark:text-white/50 mb-1.5">Project Name *</label>
-                  <input {...register('name')} placeholder="e.g. Shinde Residence - G+2"
-                    className="w-full px-4 py-3 rounded-2xl bg-[#FAFAFC] dark:bg-[#252530] border border-black/[0.07] dark:border-white/[0.07] text-[14px] focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15 transition-all" />
-                  {errors.name && <p className="mt-1 text-[12px] text-red-500">{errors.name.message}</p>}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[13px] font-semibold text-black/60 dark:text-white/50 mb-1.5">Project Name *</label>
+                    <input {...register('name')} placeholder="e.g. Shinde Residence - G+2"
+                      className="w-full px-4 py-3 rounded-2xl bg-[#FAFAFC] dark:bg-[#252530] border border-black/[0.07] dark:border-white/[0.07] text-[14px] focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15 transition-all" />
+                    {errors.name && <p className="mt-1 text-[12px] text-red-500">{errors.name.message}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-[13px] font-semibold text-black/60 dark:text-white/50 mb-1.5">Building Type *</label>
+                    <select {...register('building_type')}
+                      className="w-full px-4 py-3 rounded-2xl bg-[#FAFAFC] dark:bg-[#252530] border border-black/[0.07] dark:border-white/[0.07] text-[14px] focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15 transition-all">
+                      {BUILDING_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                    {errors.building_type && <p className="mt-1 text-[12px] text-red-500">{errors.building_type.message}</p>}
+                  </div>
                 </div>
+
                 <div>
                   <label className="block text-[13px] font-semibold text-black/60 dark:text-white/50 mb-1.5">Description</label>
                   <textarea {...register('description')} rows={2} placeholder="Optional notes about this project"
                     className="w-full px-4 py-3 rounded-2xl bg-[#FAFAFC] dark:bg-[#252530] border border-black/[0.07] dark:border-white/[0.07] text-[14px] focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15 transition-all resize-none" />
                 </div>
-                <div>
-                  <label className="block text-[13px] font-semibold text-black/60 dark:text-white/50 mb-1.5">Building Type *</label>
-                  <select {...register('building_type')}
-                    className="w-full px-4 py-3 rounded-2xl bg-[#FAFAFC] dark:bg-[#252530] border border-black/[0.07] dark:border-white/[0.07] text-[14px] focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15 transition-all">
-                    {BUILDING_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                  </select>
-                  {errors.building_type && <p className="mt-1 text-[12px] text-red-500">{errors.building_type.message}</p>}
+
+                <div className="border-t border-black/[0.06] dark:border-white/[0.06] pt-4 mt-2">
+                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-black/40 dark:text-white/30 mb-3">Project Metadata (for BOQ Report)</h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[12.5px] font-semibold text-black/60 dark:text-white/50 mb-1">Client Name</label>
+                      <input {...register('client_name')} placeholder="e.g. Omkar Koli"
+                        className="w-full px-4 py-2.5 rounded-xl bg-[#FAFAFC] dark:bg-[#252530] border border-black/[0.07] dark:border-white/[0.07] text-[13px] focus:outline-none focus:border-violet-500 transition-all" />
+                    </div>
+                    <div>
+                      <label className="block text-[12.5px] font-semibold text-black/60 dark:text-white/50 mb-1">Contractor Name</label>
+                      <input {...register('contractor_name')} placeholder="e.g. BuildWise Infrastructure Ltd."
+                        className="w-full px-4 py-2.5 rounded-xl bg-[#FAFAFC] dark:bg-[#252530] border border-black/[0.07] dark:border-white/[0.07] text-[13px] focus:outline-none focus:border-violet-500 transition-all" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                    <div>
+                      <label className="block text-[12.5px] font-semibold text-black/60 dark:text-white/50 mb-1">Architect Name</label>
+                      <input {...register('architect_name')} placeholder="e.g. Ar. Rajesh Mehta (AIA)"
+                        className="w-full px-4 py-2.5 rounded-xl bg-[#FAFAFC] dark:bg-[#252530] border border-black/[0.07] dark:border-white/[0.07] text-[13px] focus:outline-none focus:border-violet-500 transition-all" />
+                    </div>
+                    <div>
+                      <label className="block text-[12.5px] font-semibold text-black/60 dark:text-white/50 mb-1">Engineer Name</label>
+                      <input {...register('engineer_name')} placeholder="e.g. Er. Sachin Patil (FIV)"
+                        className="w-full px-4 py-2.5 rounded-xl bg-[#FAFAFC] dark:bg-[#252530] border border-black/[0.07] dark:border-white/[0.07] text-[13px] focus:outline-none focus:border-violet-500 transition-all" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                    <div>
+                      <label className="block text-[12.5px] font-semibold text-black/60 dark:text-white/50 mb-1">Project Address</label>
+                      <input {...register('address')} placeholder="e.g. Plot No. 45, Sector 4, Hinjewadi"
+                        className="w-full px-4 py-2.5 rounded-xl bg-[#FAFAFC] dark:bg-[#252530] border border-black/[0.07] dark:border-white/[0.07] text-[13px] focus:outline-none focus:border-violet-500 transition-all" />
+                    </div>
+                    <div>
+                      <label className="block text-[12.5px] font-semibold text-black/60 dark:text-white/50 mb-1">Prepared By</label>
+                      <input {...register('prepared_by')} placeholder="e.g. Quantity Surveyor (BuildWise AI)"
+                        className="w-full px-4 py-2.5 rounded-xl bg-[#FAFAFC] dark:bg-[#252530] border border-black/[0.07] dark:border-white/[0.07] text-[13px] focus:outline-none focus:border-violet-500 transition-all" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 mt-3">
+                    <div>
+                      <label className="block text-[12.5px] font-semibold text-black/60 dark:text-white/50 mb-1">City</label>
+                      <input {...register('city')} placeholder="Pune"
+                        className="w-full px-3 py-2.5 rounded-xl bg-[#FAFAFC] dark:bg-[#252530] border border-black/[0.07] dark:border-white/[0.07] text-[13px] focus:outline-none focus:border-violet-500 transition-all" />
+                    </div>
+                    <div>
+                      <label className="block text-[12.5px] font-semibold text-black/60 dark:text-white/50 mb-1">State</label>
+                      <input {...register('state')} placeholder="Maharashtra"
+                        className="w-full px-3 py-2.5 rounded-xl bg-[#FAFAFC] dark:bg-[#252530] border border-black/[0.07] dark:border-white/[0.07] text-[13px] focus:outline-none focus:border-violet-500 transition-all" />
+                    </div>
+                    <div>
+                      <label className="block text-[12.5px] font-semibold text-black/60 dark:text-white/50 mb-1">Country</label>
+                      <input {...register('country')} placeholder="India"
+                        className="w-full px-3 py-2.5 rounded-xl bg-[#FAFAFC] dark:bg-[#252530] border border-black/[0.07] dark:border-white/[0.07] text-[13px] focus:outline-none focus:border-violet-500 transition-all" />
+                    </div>
+                  </div>
                 </div>
-                <div className="flex gap-3 pt-2">
+
+                <div className="flex gap-3 pt-4 mt-2">
                   <button type="button" onClick={() => setShowCreate(false)}
                     className="flex-1 py-3 rounded-2xl border border-black/[0.08] dark:border-white/[0.08] text-[14px] font-semibold hover:bg-black/[0.03] dark:hover:bg-white/[0.03] transition-all">
                     Cancel

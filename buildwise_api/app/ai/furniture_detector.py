@@ -345,3 +345,42 @@ class FurnitureDetector:
             j = i
 
         return inside
+
+    @staticmethod
+    def map_items_to_rooms(
+        all_items: List[Dict[str, Any]],
+        doors: List[Dict[str, Any]],
+        windows: List[Dict[str, Any]],
+        rooms: List[Dict[str, Any]],
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """Map detected furniture, doors, and windows to room polygons."""
+        room_furniture = {}
+        for item in all_items:
+            center = item.get("center", (0, 0))
+            for room in rooms:
+                polygon = room.get("polygon", [])
+                if polygon and FurnitureDetector._point_in_polygon(center, polygon):
+                    room_id = room.get("id", "unknown")
+                    if room_id not in room_furniture:
+                        room_furniture[room_id] = []
+                    room_furniture[room_id].append(item)
+                    item["room_id"] = room_id
+                    break
+
+        for door in doors:
+            center = door.get("center", (0, 0))
+            for room in rooms:
+                polygon = room.get("polygon", [])
+                if polygon and FurnitureDetector._point_in_polygon(center, polygon):
+                    door["room_id"] = room.get("id")
+                    break
+
+        for window in windows:
+            center = window.get("center", (0, 0))
+            for room in rooms:
+                polygon = room.get("polygon", [])
+                if polygon and FurnitureDetector._point_in_polygon(center, polygon):
+                    window["room_id"] = room.get("id")
+                    break
+
+        return room_furniture

@@ -243,7 +243,11 @@ class ImagePreprocessor:
         # Calculate angles of all detected lines
         angles = []
         for line in lines:
-            x1, y1, x2, y2 = line[0]
+            val = line[0]
+            if isinstance(val, (list, np.ndarray)) and len(val) >= 4:
+                x1, y1, x2, y2 = val[0], val[1], val[2], val[3]
+            else:
+                x1, y1, x2, y2 = line[0], line[1], line[2], line[3]
             angle = math.degrees(math.atan2(y2 - y1, x2 - x1))
             # Normalize to [-45, 45] range (we only care about small skews)
             angle = angle % 90

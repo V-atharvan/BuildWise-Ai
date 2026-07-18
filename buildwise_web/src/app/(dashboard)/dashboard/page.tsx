@@ -10,7 +10,7 @@ import {
   Upload, ArrowRight, Clock, Plus,
 } from 'lucide-react'
 import { projectsApi, reportsApi } from '@/lib/api'
-import { formatDate, formatRelativeTime, formatCurrency } from '@/lib/utils'
+import { formatDate, formatRelativeTime, formatCurrency, getRecentlyOpenedReports } from '@/lib/utils'
 
 const cardVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -32,10 +32,12 @@ export default function DashboardPage() {
   const router = useRouter()
   const [demoProjects, setDemoProjects] = useState<any[]>([])
   const [demoReports, setDemoReports] = useState<any[]>([])
+  const [recentlyOpened, setRecentlyOpened] = useState<any[]>([])
 
   useEffect(() => {
     setDemoProjects(getDemoProjects())
     setDemoReports(getDemoReports())
+    setRecentlyOpened(getRecentlyOpenedReports())
   }, [])
 
   const { data: projectsData, isLoading: projectsLoading } = useQuery({
@@ -45,8 +47,8 @@ export default function DashboardPage() {
   })
 
   const { data: reportsData } = useQuery({
-    queryKey: ['reports', { limit: 3 }],
-    queryFn: () => reportsApi.list({ limit: 3 }).then((r) => r.data).catch(() => ({ items: [], total: 0 })),
+    queryKey: ['reports', { limit: 10 }], // Fetch more to allow filtering
+    queryFn: () => reportsApi.list({ limit: 10 }).then((r) => r.data).catch(() => ({ items: [], total: 0 })),
     retry: false,
   })
 
@@ -57,15 +59,32 @@ export default function DashboardPage() {
     ...demoProjects.filter((dp) => !backendProjects.find((bp) => bp.id === dp.id)),
   ].slice(0, 5)
 
+  const allProjects = [
+    ...backendProjects,
+    ...demoProjects.filter((dp) => !backendProjects.find((bp) => bp.id === dp.id)),
+  ]
+  const projectIds = new Set(allProjects.map(p => p.id))
+
   const backendReports: any[] = reportsData?.items ?? []
-  const reports = [
-    ...backendReports,
-    ...demoReports.filter((dr) => !backendReports.find((br) => br.id === dr.id)),
+  
+  // Filter reports to only keep those associated with active projects
+  const filteredBackendReports = backendReports.filter(r => r.project_id && projectIds.has(r.project_id))
+  const filteredDemoReports = demoReports.filter(r => r.project_id && projectIds.has(r.project_id))
+
+  const fallbackReports = [
+    ...filteredBackendReports,
+    ...filteredDemoReports.filter((dr) => !filteredBackendReports.find((br) => br.id === dr.id)),
   ].slice(0, 3)
+
+  const filteredRecentlyOpened = recentlyOpened.filter(r => r.project_id && projectIds.has(r.project_id))
+  const reports = filteredRecentlyOpened.length > 0 ? filteredRecentlyOpened.slice(0, 3) : fallbackReports
 
   const totalProjects = projects.length
   const completedEstimates = projects.filter((p: any) => p.status === 'completed').length
-  const savedReports = reports.length
+  const savedReports = [
+    ...filteredBackendReports,
+    ...filteredDemoReports.filter((dr) => !filteredBackendReports.find((br) => br.id === dr.id)),
+  ].length
 
   const stats = [
     {
@@ -91,14 +110,7 @@ export default function DashboardPage() {
   ]
 
   return (
-    <div className="space-y-7">
-      {/* Welcome */}
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }}>
-        <h2 className="text-2xl font-black tracking-tight">Good morning 👋</h2>
-        <p className="text-[14px] text-black/40 dark:text-white/35 mt-1">
-          Here&apos;s what&apos;s happening with your projects today.
-        </p>
-      </motion.div>
+    <div className="space-y-7 pt-4">
 
       {/* Stats Grid — each card is clickable and routes to the right tab */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
@@ -149,10 +161,7 @@ export default function DashboardPage() {
             <div className="text-center py-12">
               <FolderOpen className="w-10 h-10 text-black/15 dark:text-white/10 mx-auto mb-3" />
               <p className="text-[14px] font-semibold text-black/40 dark:text-white/30">No projects yet</p>
-              <p className="text-[12.5px] text-black/30 dark:text-white/20 mb-4">Upload your first building plan to get started</p>
-              <Link href="/upload" className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white text-[13px] font-semibold transition-all">
-                <Upload className="w-3.5 h-3.5" /> Upload Drawing
-              </Link>
+              <p className="text-[12.5px] text-black/30 dark:text-white/20">Create a project in the Projects tab to get started</p>
             </div>
           ) : (
             <div className="space-y-2">

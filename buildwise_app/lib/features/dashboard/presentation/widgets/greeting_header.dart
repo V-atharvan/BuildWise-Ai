@@ -3,7 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_typography.dart';
 import '../../../../core/constants/app_dimensions.dart';
-import '../../../../core/providers/auth_provider.dart';
+import '../../../auth/presentation/providers/auth_notifier.dart';
 
 class GreetingHeader extends ConsumerWidget {
   const GreetingHeader({super.key});
@@ -17,7 +17,7 @@ class GreetingHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authStateProvider);
+    final authState = ref.watch(appAuthNotifierProvider);
     final user = authState.user;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 

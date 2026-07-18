@@ -10,7 +10,7 @@ import '../../../../core/widgets/buildwise_loading.dart';
 import '../../../../core/widgets/buildwise_snackbar.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_endpoints.dart';
-import '../domain/building_params.dart';
+import '../../domain/building_params.dart';
 import '../../../estimation/presentation/screens/estimation_screen.dart';
 
 class RealReviewInputsScreen extends ConsumerStatefulWidget {

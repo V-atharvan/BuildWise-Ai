@@ -14,7 +14,6 @@ import {
 const navItems = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Projects', href: '/projects', icon: FolderOpen },
-  { label: 'Upload Drawing', href: '/upload', icon: Upload },
   { label: 'Reports', href: '/reports', icon: FileText },
   { label: 'AI Chat', href: '/chat', icon: MessageSquare, badge: 'AI' },
 ]

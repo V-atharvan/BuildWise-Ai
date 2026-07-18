@@ -5,7 +5,7 @@ import '../../../../core/constants/app_typography.dart';
 import '../../../../core/widgets/buildwise_button.dart';
 import '../../../../core/widgets/buildwise_card.dart';
 import '../../../../core/widgets/buildwise_text_field.dart';
-import '../domain/building_params.dart';
+import '../../domain/building_params.dart';
 import 'review_inputs_screen.dart';
 
 class RealStructuralInputsScreen extends StatefulWidget {

@@ -6,7 +6,7 @@ import '../../../../core/constants/app_dimensions.dart';
 import '../../../../core/constants/app_typography.dart';
 import '../../../../core/widgets/buildwise_loading.dart';
 import '../providers/dashboard_notifier.dart';
-import '../../projects/presentation/providers/projects_notifier.dart';
+import '../../../projects/presentation/providers/projects_notifier.dart';
 import '../widgets/greeting_header.dart';
 import '../widgets/stats_card.dart';
 import '../widgets/quick_actions_grid.dart';
