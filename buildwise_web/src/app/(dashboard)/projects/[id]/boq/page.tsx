@@ -10,6 +10,12 @@ import {
 } from 'lucide-react'
 import { projectsApi } from '@/lib/api'
 import { formatCurrency, formatNumber } from '@/lib/utils'
+import {
+  loadMaterialConfig, getRegionalRates,
+  CEMENT_BRANDS, STEEL_BRAND_LIST, STEEL_GRADE_LIST,
+  BRICK_CATALOG, SAND_CATALOG, AGGREGATE_CATALOG,
+  PAINT_BRAND_LIST, TILE_BRAND_LIST, TILE_TYPE_LIST,
+} from '@/lib/construction-data'
 
 // Types based on the backend schemas
 interface BOQItem {
@@ -79,10 +85,11 @@ export default function ProjectBOQTab() {
 
     const fetchBOQ = async () => {
       try {
+        const materialConfig = loadMaterialConfig(projectId)
         const response = await fetch(`http://localhost:8000/api/v1/boq/generate/${projectId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({})
+          body: JSON.stringify(materialConfig)
         })
         if (response.ok) {
           const data = await response.json()
@@ -147,39 +154,66 @@ export default function ProjectBOQTab() {
         grand_total: 1916350,
       }
 
+      const config = loadMaterialConfig(projectId)
+      const regRates = getRegionalRates(config.region_state, config.region_city)
+
+      const cementBrand = CEMENT_BRANDS.find(c => c.id === config.cement_brand_id) || CEMENT_BRANDS[0]
+      const cementRate = cementBrand.price_per_bag
+
+      const steelBrand = STEEL_BRAND_LIST.find(s => s.id === config.steel_brand_id) || STEEL_BRAND_LIST[0]
+      let steelRate = steelBrand.price_per_kg
+      const steelGrade = STEEL_GRADE_LIST.find(g => g.id === config.steel_grade_id) || STEEL_GRADE_LIST[1]
+      steelRate *= steelGrade.multiplier
+
+      const brickBrand = BRICK_CATALOG.find(b => b.id === config.brick_brand_id) || BRICK_CATALOG[0]
+      const brickRate = brickBrand.price_per_unit
+
+      const sandType = SAND_CATALOG.find(s => s.id === config.sand_type_id) || SAND_CATALOG[0]
+      const sandRate = sandType.price_per_m3
+
+      const aggType = AGGREGATE_CATALOG.find(a => a.id === config.aggregate_type_id) || AGGREGATE_CATALOG[0]
+      const aggRate = aggType.price_per_m3
+
+      const tileType = TILE_TYPE_LIST.find(t => t.id === config.tile_type_id) || TILE_TYPE_LIST[0]
+      const tileBrand = TILE_BRAND_LIST.find(b => b.id === config.tile_brand_id) || TILE_BRAND_LIST[0]
+      const tileRate = tileType.base_price_per_m2 * tileBrand.multiplier
+
+      const paintBrand = PAINT_BRAND_LIST.find(p => p.id === config.paint_brand_id) || PAINT_BRAND_LIST[0]
+      const paintRate = (regRates.paint_interior_m2 || 120) * paintBrand.multiplier
+
       const sections = [
         {
           section_name: "A. Earthwork",
           items: [
-            { sl_no: 1, description: "Excavation in ordinary soil for foundations", unit: "m³", quantity: materials.excavation_volume, rate: 200, amount: cost.excavation_cost }
+            { sl_no: 1, description: "Excavation in ordinary soil for foundations", unit: "m³", quantity: materials.excavation_volume, rate: regRates.excavation_m3 || 200, amount: cost.excavation_cost }
           ],
           subtotal: cost.excavation_cost
         },
         {
           section_name: "B. RCC & Structural Works",
           items: [
-            { sl_no: 2, description: "RCC M20 grade concrete frames", unit: "m³", quantity: materials.concrete_volume, rate: 5500, amount: cost.concrete_cost },
-            { sl_no: 3, description: "Steel reinforcement Fe500 TMT bars", unit: "kg", quantity: materials.steel_weight, rate: 75, amount: cost.steel_cost }
+            { sl_no: 2, description: "RCC M20 grade concrete frames", unit: "m³", quantity: materials.concrete_volume, rate: regRates.concrete_rcc_m3 || 5500, amount: cost.concrete_cost },
+            { sl_no: 3, description: "Steel reinforcement Fe500 TMT bars", unit: "kg", quantity: materials.steel_weight, rate: steelRate, amount: cost.steel_cost }
           ],
           subtotal: cost.concrete_cost + cost.steel_cost
         },
         {
           section_name: "C. Masonry & Materials",
           items: [
-            { sl_no: 4, description: "Brick masonry in CM 1:6", unit: "nos", quantity: materials.bricks_count, rate: 10, amount: cost.brick_cost },
-            { sl_no: 5, description: "OPC 53 Grade Cement", unit: "bags", quantity: materials.cement_bags, rate: 430, amount: cost.cement_cost },
-            { sl_no: 6, description: "River sand / M-Sand", unit: "m³", quantity: materials.sand_volume, rate: 1400, amount: cost.sand_cost },
-            { sl_no: 7, description: "Crushed stone aggregate 20mm", unit: "m³", quantity: materials.aggregate_volume, rate: 1600, amount: cost.aggregate_cost }
+            { sl_no: 4, description: `Masonry wall units (${brickBrand.name})`, unit: "nos", quantity: materials.bricks_count || materials.blocks_count || 0, rate: brickRate, amount: cost.brick_cost || cost.block_cost || 0 },
+            { sl_no: 5, description: `Cement (${cementBrand.name})`, unit: "bags", quantity: materials.cement_bags, rate: cementRate, amount: cost.cement_cost },
+            { sl_no: 6, description: `River sand / M-Sand (${sandType.name})`, unit: "m³", quantity: materials.sand_volume, rate: sandRate, amount: cost.sand_cost },
+            { sl_no: 7, description: `Crushed stone aggregate 20mm (${aggType.name})`, unit: "m³", quantity: materials.aggregate_volume, rate: aggRate, amount: cost.aggregate_cost }
           ],
-          subtotal: cost.brick_cost + cost.cement_cost + cost.sand_cost + cost.aggregate_cost
+          subtotal: (cost.brick_cost || cost.block_cost || 0) + cost.cement_cost + cost.sand_cost + cost.aggregate_cost
         },
         {
           section_name: "D. Finishing Works",
           items: [
-            { sl_no: 8, description: "Cement plaster 12mm thick CM 1:4", unit: "m²", quantity: materials.plaster_area, rate: 280, amount: cost.plaster_cost },
-            { sl_no: 9, description: "Interior emulsion wall painting (2 coats)", unit: "m²", quantity: materials.paint_area, rate: 120, amount: cost.paint_cost },
-            { sl_no: 10, description: "Vitrified floor tiles 600×600mm", unit: "m²", quantity: materials.tiles_area, rate: 650, amount: cost.tiles_cost },
-            { sl_no: 11, description: "Liquid membrane waterproofing", unit: "m²", quantity: materials.waterproofing_area, rate: 380, amount: cost.waterproofing_cost }
+            { sl_no: 8, description: "Cement plaster 12mm thick CM 1:4", unit: "m²", quantity: materials.plaster_area, rate: regRates.plaster_m2 || 280, amount: cost.plaster_cost },
+            { sl_no: 9, description: `Interior emulsion wall painting (${paintBrand.name})`, unit: "m²", quantity: materials.paint_area, rate: paintRate, amount: cost.paint_cost },
+            { sl_no: 10, description: `Vitrified floor tiles 600×600mm (${tileBrand.name})`, unit: "m²", quantity: materials.tiles_area, rate: tileRate, amount: cost.tiles_cost },
+            { sl_no: 11, description: "Liquid membrane waterproofing", unit: "m²", quantity: materials.waterproofing_area, rate: regRates.waterproofing_m2 || 380, amount: cost.waterproofing_cost }
           ],
           subtotal: cost.plaster_cost + cost.paint_cost + cost.tiles_cost + cost.waterproofing_cost
         }
@@ -195,10 +229,10 @@ export default function ProjectBOQTab() {
           room_name: room.label || `Room ${idx + 1}`,
           area_m2: area,
           area_sqft: area * 10.764,
-          subtotal: bricks * 10 + area * 650,
+          subtotal: Math.round(bricks * brickRate + area * tileRate),
           items: [
-            { sl_no: 1, description: "Brick masonry layout walls", unit: "nos", quantity: bricks, rate: 10, amount: bricks * 10 },
-            { sl_no: 2, description: "Vitrified room floor tiling", unit: "m²", quantity: area, rate: 650, amount: Math.round(area * 650) }
+            { sl_no: 1, description: "Brick masonry layout walls", unit: "nos", quantity: bricks, rate: brickRate, amount: Math.round(bricks * brickRate) },
+            { sl_no: 2, description: "Vitrified room floor tiling", unit: "m²", quantity: area, rate: tileRate, amount: Math.round(area * tileRate) }
           ]
         }
       })
@@ -239,36 +273,117 @@ export default function ProjectBOQTab() {
   }
 
   const handleDownload = async (format: string) => {
-    if (!projectId) return
-    setIsExporting(format)
-    try {
-      const response = await fetch(`http://localhost:8000/api/v1/boq/${projectId}/download?format=${format}`, {
-        method: 'GET'
-      })
-      if (response.ok) {
-        const blob = await response.blob()
-        const url = window.URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `BOQ_Report_${projectId}.${format === 'excel' ? 'xlsx' : format}`
-        document.body.appendChild(a)
-        a.click()
-        a.remove()
-      } else {
-        alert("Direct API download failed. Try exporting locally.")
+    if (!projectId || !localBOQ) return
+    
+    if (format === 'pdf') {
+      window.open(`/report/${projectId}`, '_blank')
+      return
+    }
+
+    if (format === 'excel') {
+      setIsExporting('excel')
+      try {
+        let xml = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:relationship"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <Styles>
+  <Style ss:ID="Default">
+   <Alignment ss:Vertical="Bottom"/>
+   <Borders/>
+   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="11" ss:Color="#000000"/>
+  </Style>
+  <Style ss:ID="Header">
+   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="12" ss:Color="#FFFFFF" ss:Bold="1"/>
+   <Interior ss:Color="#4F46E5" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="SubHeader">
+   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="11" ss:Color="#4F46E5" ss:Bold="1"/>
+   <Interior ss:Color="#EEF2F6" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="Amount">
+   <NumberFormat ss:Format="&quot;₹&quot;#,##0"/>
+   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Bold="1"/>
+  </Style>
+  <Style ss:ID="Title">
+   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="16" ss:Bold="1" ss:Color="#1E1E24"/>
+  </Style>
+ </Styles>
+ <Worksheet ss:Name="BOQ Takeoff Report">
+  <Table ss:ExpandedColumnCount="6" ss:ExpandedRowCount="${localBOQ.building_boq.sections.reduce((sum, c) => sum + c.items.length + 2, 0) + 15}" x:FullColumns="1" x:FullRows="1" ss:DefaultColumnWidth="60">
+   <Column ss:Width="40"/>
+   <Column ss:Width="250"/>
+   <Column ss:Width="50"/>
+   <Column ss:Width="60"/>
+   <Column ss:Width="65"/>
+   <Column ss:Width="95"/>
+   
+   <Row ss:Height="24">
+    <Cell ss:MergeAcross="5" ss:StyleID="Title"><Data ss:Type="String">BuildWise AI — Construction BOQ Report</Data></Cell>
+   </Row>
+   <Row><Cell ss:MergeAcross="5"><Data ss:Type="String">Project: ${localBOQ.project_name} | Date: ${new Date().toLocaleDateString()}</Data></Cell></Row>
+   <Row ss:Index="4" ss:Height="20">
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Sl No</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Item Description</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Unit</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Quantity</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Rate (₹)</Data></Cell>
+    <Cell ss:StyleID="Header"><Data ss:Type="String">Amount (₹)</Data></Cell>
+   </Row>`
+
+        localBOQ.building_boq.sections.forEach((section) => {
+          xml += `\n   <Row ss:Height="18">
+    <Cell ss:MergeAcross="5" ss:StyleID="SubHeader"><Data ss:Type="String">${section.section_name.toUpperCase()}</Data></Cell>
+   </Row>`
+
+          section.items.forEach((item) => {
+            xml += `\n   <Row>
+    <Cell><Data ss:Type="String">${item.sl_no}</Data></Cell>
+    <Cell><Data ss:Type="String">${item.description}</Data></Cell>
+    <Cell><Data ss:Type="String">${item.unit}</Data></Cell>
+    <Cell><Data ss:Type="Number">${item.quantity}</Data></Cell>
+    <Cell><Data ss:Type="Number">${item.rate}</Data></Cell>
+    <Cell ss:StyleID="Amount"><Data ss:Type="Number">${item.amount}</Data></Cell>
+   </Row>`
+          })
+        })
+
+        // Summary block
+        xml += `\n   <Row><Cell ss:MergeAcross="5"><Data ss:Type="String"></Data></Cell></Row>`
+        xml += `\n   <Row ss:Height="18"><Cell ss:MergeAcross="5" ss:StyleID="SubHeader"><Data ss:Type="String">BOQ SUMMARY BREAKDOWN</Data></Cell></Row>`
+        xml += `\n   <Row><Cell ss:MergeAcross="4"><Data ss:Type="String">Material Takeoff Cost</Data></Cell><Cell ss:StyleID="Amount"><Data ss:Type="Number">${localBOQ.building_boq.material_subtotal}</Data></Cell></Row>`
+        xml += `\n   <Row><Cell ss:MergeAcross="4"><Data ss:Type="String">Labour Takeoff Cost</Data></Cell><Cell ss:StyleID="Amount"><Data ss:Type="Number">${localBOQ.building_boq.labour_cost}</Data></Cell></Row>`
+        xml += `\n   <Row><Cell ss:MergeAcross="4"><Data ss:Type="String">Machinery &amp; Rental Equipment</Data></Cell><Cell ss:StyleID="Amount"><Data ss:Type="Number">${localBOQ.building_boq.equipment_cost}</Data></Cell></Row>`
+        xml += `\n   <Row><Cell ss:MergeAcross="4"><Data ss:Type="String">Overhead &amp; Contractor Margin</Data></Cell><Cell ss:StyleID="Amount"><Data ss:Type="Number">${localBOQ.building_boq.contractor_margin}</Data></Cell></Row>`
+        xml += `\n   <Row><Cell ss:MergeAcross="4"><Data ss:Type="String">Contingency Buffer</Data></Cell><Cell ss:StyleID="Amount"><Data ss:Type="Number">${localBOQ.building_boq.contingency}</Data></Cell></Row>`
+        xml += `\n   <Row><Cell ss:MergeAcross="4"><Data ss:Type="String">GST (18% applied)</Data></Cell><Cell ss:StyleID="Amount"><Data ss:Type="Number">${localBOQ.building_boq.gst_amount}</Data></Cell></Row>`
+        xml += `\n   <Row ss:Height="20"><Cell ss:MergeAcross="4" ss:StyleID="SubHeader"><Data ss:Type="String">GRAND TOTAL CONTRACT AMOUNT</Data></Cell><Cell ss:StyleID="Amount"><Data ss:Type="Number">${localBOQ.building_boq.grand_total}</Data></Cell></Row>`
+
+        xml += `\n  </Table>
+  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+   <Selected/>
+   <ProtectObjects>False</ProtectObjects>
+   <ProtectScenarios>False</ProtectScenarios>
+  </WorksheetOptions>
+ </Worksheet>
+</Workbook>`
+
+        const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.setAttribute('href', url)
+        link.setAttribute('download', `BOQ_Takeoff_${projectId}.xls`)
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      } catch (err) {
+        console.error("Local Excel export failed:", err)
+      } finally {
+        setIsExporting(null)
       }
-    } catch (e) {
-      const textContent = JSON.stringify(localBOQ, null, 2)
-      const blob = new Blob([textContent], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `BOQ_Offline_${projectId}.json`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-    } finally {
-      setIsExporting(null)
     }
   }
 

@@ -45,7 +45,9 @@ class BOQGenerator:
             Dict containing building_boq, room_wise_boq, and metadata.
         """
         rooms = analysis.get("rooms", [])
-        rates = CPWD_BASE_RATES_2024
+        rates = dict(CPWD_BASE_RATES_2024)
+        if costs and "rates_applied" in costs:
+            rates.update(costs["rates_applied"])
 
         # ── Building-Level BOQ ────────────────────────────────────────────
         building_boq = BOQGenerator._generate_building_boq(

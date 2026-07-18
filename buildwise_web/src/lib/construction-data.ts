@@ -327,3 +327,196 @@ export function saveMaterialConfig(config: MaterialConfig, projectId?: string) {
   const key = projectId ? `bw_material_config_${projectId}` : 'bw_material_config'
   localStorage.setItem(key, JSON.stringify(config))
 }
+
+export function recalculateDemoEstimation(projectId: string, config: MaterialConfig) {
+  if (typeof window === 'undefined') return
+  try {
+    const estKeys: string[] = [`bw_demo_est_${projectId}`]
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key?.startsWith('bw_demo_est_') && key !== `bw_demo_est_${projectId}`) {
+        estKeys.push(key)
+      }
+    }
+
+    estKeys.forEach(key => {
+      const estStr = localStorage.getItem(key)
+      if (!estStr) return
+      const est = JSON.parse(estStr)
+      if (est.project_id !== projectId && key !== `bw_demo_est_${projectId}`) return
+
+      const params = est.user_inputs || {}
+      
+      const area = parseFloat(params.total_area || 0)
+      const floors = parseInt(params.num_floors || 1)
+      const ht = parseFloat(params.floor_height || 3.0)
+      const wt = parseFloat(params.wall_thickness || 0.23)
+      const st = parseFloat(params.slab_thickness || 0.12)
+      const cg = (params.concrete_grade || 'M20').toUpperCase()
+      const ft = (params.foundation_type || 'isolated').toLowerCase()
+      const bt = (params.brick_type || 'red_brick').toLowerCase()
+      const waste = 1 + parseFloat(params.waste_percentage || 5) / 100
+
+      const areaM2 = area * 0.092903
+      const footprintM2 = areaM2 / floors
+      const length = Math.sqrt(footprintM2) * 1.25
+      const width = footprintM2 / length
+      const perimeterM = 2 * (length + width)
+      const wallVolumeM3 = perimeterM * ht * wt * floors * 0.90
+      const slabConcrete = footprintM2 * st * floors
+      
+      const foundationRatios: Record<string, number> = { combined: 0.25, raft: 0.40, pile: 0.30, isolated: 0.20 }
+      const totalConcreteVolume = slabConcrete * 1.15 + (slabConcrete * (foundationRatios[ft] || 0.20))
+      const totalSteelWeight = totalConcreteVolume * 85.0
+      
+      const bricksCount = bt === 'red_brick' ? Math.ceil(wallVolumeM3 * 500) : 0
+      const blocksCount = bt !== 'red_brick' ? Math.ceil(wallVolumeM3 * 42) : 0
+
+      const wetMortarVol = wallVolumeM3 * 0.30
+      const dryMortarVol = wetMortarVol * 1.33
+      const masonryMortarCementM3 = (1 / 7) * dryMortarVol
+      const masonryMortarSandM3 = (6 / 7) * dryMortarVol
+
+      const plasterInternal = 2.2 * areaM2
+      const plasterExternal = perimeterM * ht * floors
+      const totalPlasterArea = plasterInternal + plasterExternal
+      const wetPlasterVol = (plasterInternal * 0.012) + (plasterExternal * 0.020)
+      const dryPlasterVol = wetPlasterVol * 1.33
+      const plasterCementM3 = (1 / 5) * dryPlasterVol
+      const plasterSandM3 = (4 / 5) * dryPlasterVol
+
+      const paintArea = totalPlasterArea * 1.5
+      const tilesArea = areaM2
+      const bathroomsArea = areaM2 * 0.12
+      const waterproofingArea = footprintM2 + bathroomsArea + (footprintM2 * 0.8)
+      const excavationVolume = footprintM2 * 0.35 * 1.5
+
+      const mixRatios: Record<string, number[]> = { M10:[1,3,6], M15:[1,2,4], M20:[1,1.5,3], M25:[1,1,2], M30:[1,0.75,1.5] }
+      const ratio = mixRatios[cg] || [1,1.5,3]
+      const rSum = ratio.reduce((a,b)=>a+b,0)
+      const dryConcreteVolume = totalConcreteVolume * 1.54
+
+      const concreteCementM3 = (ratio[0]/rSum) * dryConcreteVolume
+      const concreteSandM3 = (ratio[1]/rSum) * dryConcreteVolume
+      const concreteAggM3 = (ratio[2]/rSum) * dryConcreteVolume
+
+      const totalCementM3 = concreteCementM3 + masonryMortarCementM3 + plasterCementM3
+      const totalCementBags = Math.ceil((totalCementM3 / 0.0347) * waste)
+      const totalSandM3 = (concreteSandM3 + masonryMortarSandM3 + plasterSandM3) * waste
+      const totalAggM3 = concreteAggM3 * waste
+
+      const rates = getRegionalRates(config.region_state, config.region_city)
+
+      const cementBrand = CEMENT_BRANDS.find(c => c.id === config.cement_brand_id) || CEMENT_BRANDS[0]
+      const cementRate = cementBrand.price_per_bag
+
+      const steelBrand = STEEL_BRAND_LIST.find(s => s.id === config.steel_brand_id) || STEEL_BRAND_LIST[0]
+      let steelRate = steelBrand.price_per_kg
+      const steelGrade = STEEL_GRADE_LIST.find(g => g.id === config.steel_grade_id) || STEEL_GRADE_LIST[1]
+      steelRate *= steelGrade.multiplier
+
+      const brickBrand = BRICK_CATALOG.find(b => b.id === config.brick_brand_id) || BRICK_CATALOG[0]
+      const brickRate = brickBrand.price_per_unit
+
+      const sandType = SAND_CATALOG.find(s => s.id === config.sand_type_id) || SAND_CATALOG[0]
+      const sandRate = sandType.price_per_m3
+
+      const aggType = AGGREGATE_CATALOG.find(a => a.id === config.aggregate_type_id) || AGGREGATE_CATALOG[0]
+      const aggRate = aggType.price_per_m3
+
+      const tileType = TILE_TYPE_LIST.find(t => t.id === config.tile_type_id) || TILE_TYPE_LIST[0]
+      const tileBrand = TILE_BRAND_LIST.find(b => b.id === config.tile_brand_id) || TILE_BRAND_LIST[0]
+      const tileRate = tileType.base_price_per_m2 * tileBrand.multiplier
+
+      const paintBrand = PAINT_BRAND_LIST.find(p => p.id === config.paint_brand_id) || PAINT_BRAND_LIST[0]
+
+      const concreteCost = Math.round(totalConcreteVolume * waste * (rates.concrete_rcc_m3 || 5500))
+      const steelCost = Math.round(totalSteelWeight * waste * steelRate)
+      const cementCost = Math.round(totalCementBags * cementRate)
+      const sandCost = Math.round(totalSandM3 * sandRate)
+      const aggCost = Math.round(totalAggM3 * aggRate)
+      const brickCost = Math.round((bricksCount || blocksCount) * waste * brickRate)
+      const plasterCost = Math.round(totalPlasterArea * waste * (rates.plaster_m2 || 280))
+      const paintCost = Math.round(paintArea * waste * (rates.paint_interior_m2 || 120) * paintBrand.multiplier)
+      const tilesCost = Math.round(tilesArea * waste * tileRate)
+      const waterproofingCost = Math.round(waterproofingArea * waste * (rates.waterproofing_m2 || 380))
+      const excavationCost = Math.round(excavationVolume * (rates.excavation_m3 || 200))
+
+      const shutteringCost = Math.round((totalConcreteVolume * 4.5) * 150)
+      const plumbingCost = Math.round(bathroomsArea * 25000)
+      const electricalCost = Math.round(areaM2 * 1200)
+      const doorCost = (floors * 4) * 8500
+      const windowCost = (floors * 6) * 6200
+
+      const totalMatCost = concreteCost + steelCost + cementCost + sandCost + aggCost + brickCost + 
+                           plasterCost + paintCost + tilesCost + waterproofingCost + excavationCost +
+                           shutteringCost + plumbingCost + electricalCost + doorCost + windowCost
+
+      const labourCost = Math.round(totalMatCost * 0.30)
+      const equipmentCost = Math.round(totalMatCost * 0.05)
+      const baseExec = totalMatCost + labourCost + equipmentCost
+      
+      const contractorVal = config.contractor_charge_value
+      const contractor = config.contractor_charge_type === 'fixed'
+        ? contractorVal
+        : Math.round(baseExec * (contractorVal / 100))
+
+      const contingency = Math.round(baseExec * 0.05)
+      const taxable = baseExec + contractor + contingency
+      const gst = Math.round(taxable * ((config.gst_pct || 18) / 100))
+      const grandTotal = taxable + gst
+
+      est.materials = {
+        concrete_volume: +(totalConcreteVolume*waste).toFixed(2),
+        steel_weight: +(totalSteelWeight*waste).toFixed(0),
+        cement_bags: totalCementBags,
+        sand_volume: +totalSandM3.toFixed(2),
+        aggregate_volume: +totalAggM3.toFixed(2),
+        bricks_count: bt==='red_brick'?Math.ceil(bricksCount*waste):0,
+        blocks_count: bt!=='red_brick'?Math.ceil(blocksCount*waste):0,
+        mortar_volume: +(wetMortarVol*waste).toFixed(2),
+        plaster_area: +(totalPlasterArea*waste).toFixed(2),
+        paint_area: +(paintArea*waste).toFixed(2),
+        tiles_area: +(tilesArea*waste).toFixed(2),
+        waterproofing_area: +(waterproofingArea*waste).toFixed(2),
+        excavation_volume: +excavationVolume.toFixed(2),
+        formwork_area: +(totalConcreteVolume*4.5).toFixed(2),
+        doors_count: floors*4,
+        windows_count: floors*6
+      }
+
+      est.cost_breakdown = {
+        concrete_cost: concreteCost,
+        steel_cost: steelCost,
+        cement_cost: cementCost,
+        sand_cost: sandCost,
+        aggregate_cost: aggCost,
+        brick_cost: bt==='red_brick'?brickCost:0,
+        block_cost: bt!=='red_brick'?brickCost:0,
+        mortar_cost: 0,
+        plaster_cost: plasterCost,
+        paint_cost: paintCost,
+        tiles_cost: tilesCost,
+        waterproofing_cost: waterproofingCost,
+        excavation_cost: excavationCost,
+        shuttering_cost: shutteringCost,
+        plumbing_cost: plumbingCost,
+        electrical_cost: electricalCost,
+        door_cost: doorCost,
+        window_cost: windowCost,
+        labour_cost: labourCost,
+        equipment_cost: equipmentCost,
+        total_material_cost: totalMatCost,
+        gst_amount: gst,
+        contractor_margin: contractor,
+        contingency,
+        grand_total: grandTotal
+      }
+
+      est.total_cost = grandTotal
+      localStorage.setItem(key, JSON.stringify(est))
+    })
+  } catch (e) {
+    console.error("Local recalculation failed:", e)
+  }
+}

@@ -59,16 +59,37 @@ async def generate_boq(
         "windows_count": analysis.get("window_count", 6),
     }
 
-    # Merge brand selections if provided
-    for key in ["brick_brand_id", "cement_brand_id", "steel_brand_id",
-                "paint_brand_id", "tile_brand_id", "plumbing_brand_id",
-                "electrical_brand_id"]:
-        if key in params:
-            user_inputs[key] = params[key]
+    # Merge brand selections and configuration parameters if provided
+    user_inputs.update(params)
 
     # Run estimation engines
     materials = MaterialEngine.run_estimation(user_inputs)
-    costs = CostEngine.calculate_cost(materials, params.get("custom_rates"))
+
+    # Resolve regional config
+    region = None
+    if "region_state" in user_inputs:
+        region = {
+            "state": user_inputs.get("region_state"),
+            "city": user_inputs.get("region_city")
+        }
+
+    # Resolve contractor config
+    contractor_config = None
+    if "contractor_charge_type" in user_inputs:
+        contractor_config = {
+            "type": user_inputs.get("contractor_charge_type"),
+            "amount": user_inputs.get("contractor_charge_value"),
+            "percentage": user_inputs.get("contractor_charge_value"),
+            "gst_pct": user_inputs.get("gst_pct"),
+        }
+
+    costs = CostEngine.calculate_cost(
+        materials=materials,
+        custom_rates=params.get("custom_rates"),
+        brand_config=user_inputs,
+        region=region,
+        contractor_config=contractor_config
+    )
 
     # Generate BOQ
     boq = BOQGenerator.generate(

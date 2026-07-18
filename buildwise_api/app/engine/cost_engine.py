@@ -138,7 +138,10 @@ class CostEngine:
 
         # ── 8. Tax ────────────────────────────────────────────────────────────
         taxable_subtotal = base_execution_cost + margin_cost + contingency_cost + transport_cost
-        gst_amount = round(taxable_subtotal * GST_RATE)
+        gst_pct = contractor_config.get("gst_pct", GST_RATE * 100) if contractor_config else GST_RATE * 100
+        if gst_pct is None:
+            gst_pct = GST_RATE * 100
+        gst_amount = round(taxable_subtotal * (float(gst_pct) / 100.0))
         miscellaneous = round(base_execution_cost * 0.02)  # 2% miscellaneous
 
         grand_total = taxable_subtotal + gst_amount + miscellaneous

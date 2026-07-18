@@ -32,8 +32,32 @@ async def create_estimation(
     # 1. Run Material Engine (IS Codes calculation)
     materials = MaterialEngine.run_estimation(user_inputs)
 
+    # Resolve regional config
+    region = None
+    if "region_state" in user_inputs:
+        region = {
+            "state": user_inputs.get("region_state"),
+            "city": user_inputs.get("region_city")
+        }
+
+    # Resolve contractor config
+    contractor_config = None
+    if "contractor_charge_type" in user_inputs:
+        contractor_config = {
+            "type": user_inputs.get("contractor_charge_type"),
+            "amount": user_inputs.get("contractor_charge_value"),
+            "percentage": user_inputs.get("contractor_charge_value"),
+            "gst_pct": user_inputs.get("gst_pct"),
+        }
+
     # 2. Run Cost Engine (CPWD Delhi 2024 Base Rates and Cost Build-up)
-    costs = CostEngine.calculate_cost(materials, payload.get("custom_rates"))
+    costs = CostEngine.calculate_cost(
+        materials=materials,
+        custom_rates=payload.get("custom_rates"),
+        brand_config=user_inputs,
+        region=region,
+        contractor_config=contractor_config
+    )
 
     # Share the exact same UUID to easily link material and cost takeoff records
     estimation_id = str(uuid.uuid4())

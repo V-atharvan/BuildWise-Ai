@@ -2,7 +2,9 @@
 
 import { useTheme } from '@/providers/ThemeProvider'
 import { useState, useEffect } from 'react'
-import { Sun, Moon, Bell, Shield, Languages, Ruler, Eye, Loader2 } from 'lucide-react'
+import { Sun, Moon, Bell, Shield, Languages, Ruler, Eye, Loader2, Sparkles, KeyRound, CheckCircle2, AlertCircle, EyeOff } from 'lucide-react'
+import { getGeminiApiKey, setGeminiApiKey, validateGeminiKey } from '@/lib/floor-plan-ai/gemini-analyzer'
+import type { GeminiModel } from '@/lib/floor-plan-ai/gemini-analyzer'
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme()
@@ -14,14 +16,54 @@ export default function SettingsPage() {
   const [emailAlerts, setEmailAlerts] = useState(true)
   const [processAlerts, setProcessAlerts] = useState(true)
 
+  // AI Engine states
+  const [geminiKey, setGeminiKeyState] = useState('')
+  const [geminiKeyInput, setGeminiKeyInput] = useState('')
+  const [showGeminiKey, setShowGeminiKey] = useState(false)
+  const [geminiModel, setGeminiModel] = useState<GeminiModel>('gemini-3.5-flash')
+  const [testingKey, setTestingKey] = useState(false)
+  const [keyStatus, setKeyStatus] = useState<'untested' | 'valid' | 'invalid'>('untested')
+
   // Ensure theme is mounted to prevent hydration mismatches
   useEffect(() => {
     setMounted(true)
     const savedUnit = localStorage.getItem('bw-pref-unit') || 'metric'
     const savedLang = localStorage.getItem('bw-pref-lang') || 'en'
+    const savedModel = (localStorage.getItem('bw_gemini_model') as GeminiModel) || 'gemini-3.5-flash'
     setUnit(savedUnit)
     setLang(savedLang)
+    setGeminiModel(savedModel)
+    const key = getGeminiApiKey()
+    setGeminiKeyState(key)
+    setGeminiKeyInput(key)
+    if (key) setKeyStatus('untested')
   }, [])
+
+  const handleTestAndSaveKey = async () => {
+    if (!geminiKeyInput.trim()) return
+    setTestingKey(true)
+    setKeyStatus('untested')
+    const valid = await validateGeminiKey(geminiKeyInput.trim(), geminiModel)
+    setKeyStatus(valid ? 'valid' : 'invalid')
+    if (valid) {
+      setGeminiApiKey(geminiKeyInput.trim())
+      setGeminiKeyState(geminiKeyInput.trim())
+    }
+    setTestingKey(false)
+  }
+
+  const handleModelChange = (m: GeminiModel) => {
+    setGeminiModel(m)
+    localStorage.setItem('bw_gemini_model', m)
+  }
+
+  const handleClearKey = () => {
+    setGeminiApiKey('')
+    setGeminiKeyState('')
+    setGeminiKeyInput('')
+    setKeyStatus('untested')
+  }
+
 
   const handleUnitChange = (val: string) => {
     setUnit(val)
@@ -46,13 +88,93 @@ export default function SettingsPage() {
       <div>
         <h2 className="text-2xl font-black tracking-tight">Application Settings</h2>
         <p className="text-[14px] text-black/40 dark:text-white/35 mt-1">
-          Customize design theme, calculation units, languages, and notifications.
+          Customize design theme, calculation units, languages, notifications, and AI engine.
         </p>
+      </div>
+
+      {/* ── AI Engine Section ─────────────────────────────────────────────── */}
+      <div className="bg-white dark:bg-[#1E1E24] border border-violet-500/20 rounded-[24px] p-6 space-y-5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-violet-500/10 rounded-2xl flex items-center justify-center">
+            <Sparkles className="w-5 h-5 text-violet-500" />
+          </div>
+          <div>
+            <h3 className="font-black text-[15px]">AI Floor Plan Engine</h3>
+            <p className="text-[12px] text-black/40 dark:text-white/30">Configure the Gemini Vision API for real floor plan analysis</p>
+          </div>
+          {keyStatus === 'valid' && (
+            <div className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Active
+            </div>
+          )}
+          {keyStatus === 'invalid' && (
+            <div className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-500 text-[11px] font-bold">
+              <AlertCircle className="w-3.5 h-3.5" /> Invalid
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-[11px] font-black uppercase text-black/40 dark:text-white/30 mb-1.5 tracking-wider">Gemini API Key</label>
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2">
+                <KeyRound className="w-4 h-4 text-black/30 dark:text-white/30" />
+              </div>
+              <input
+                type={showGeminiKey ? 'text' : 'password'}
+                placeholder="AIzaSy..."
+                value={geminiKeyInput}
+                onChange={e => { setGeminiKeyInput(e.target.value); setKeyStatus('untested') }}
+                className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-black/[0.1] dark:border-white/[0.1] bg-transparent text-[13px] font-mono focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+              />
+              <button
+                onClick={() => setShowGeminiKey(!showGeminiKey)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-black/30 dark:text-white/30 hover:text-black/60"
+              >
+                {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <p className="text-[11px] text-black/35 dark:text-white/25 mt-1">
+              Key stored locally in your browser only. Get one free from{' '}
+              <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-violet-500 font-semibold hover:underline">Google AI Studio</a>.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-black uppercase text-black/40 dark:text-white/30 mb-1.5 tracking-wider">AI Model</label>
+            <select value={geminiModel} onChange={e => handleModelChange(e.target.value as GeminiModel)}
+              className="w-full px-3 py-2.5 rounded-xl border border-black/[0.08] dark:border-white/[0.08] bg-[#FAFAFC] dark:bg-[#252530] text-[13px] focus:outline-none focus:border-violet-500 font-semibold">
+              <option value="gemini-3.5-flash">Gemini 3.5 Flash — Latest (Recommended)</option>
+              <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite — Fast & Light</option>
+              <option value="gemini-2.0-flash">Gemini 2.0 Flash — Standard</option>
+              <option value="gemini-1.5-pro">Gemini 1.5 Pro — Legacy Pro</option>
+            </select>
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={handleTestAndSaveKey}
+              disabled={testingKey || !geminiKeyInput.trim()}
+              className="flex-1 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-[13px] font-bold transition-all flex items-center justify-center gap-2 shadow-md shadow-violet-600/20"
+            >
+              {testingKey ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              {testingKey ? 'Testing...' : keyStatus === 'valid' ? 'Re-Test & Save' : 'Test & Save Key'}
+            </button>
+            {geminiKey && (
+              <button onClick={handleClearKey}
+                className="px-4 py-2.5 rounded-xl border border-red-500/20 text-red-500 hover:bg-red-500/5 text-[13px] font-bold transition-all">
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-[#1E1E24] border border-black/[0.06] dark:border-white/[0.06] rounded-[24px] p-6 space-y-6 divide-y divide-black/[0.05] dark:divide-white/[0.05]">
         {/* Theme Preferences */}
         <div className="flex items-center justify-between pb-6 gap-4">
+
           <div className="space-y-0.5">
             <h3 className="text-[14px] font-bold flex items-center gap-2">
               <Eye className="w-4 h-4 text-violet-500" /> Interface Theme

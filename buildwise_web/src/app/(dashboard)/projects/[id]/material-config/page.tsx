@@ -13,7 +13,7 @@ import {
   TILE_BRAND_LIST, TILE_TYPE_LIST, TILE_SIZE_LIST,
   PLUMBING_BRAND_LIST, ELECTRICAL_BRAND_LIST,
   AVAILABLE_REGIONS, STATE_LABELS, CONTRACTOR_CHARGE_OPTIONS,
-  DEFAULT_MATERIAL_CONFIG, loadMaterialConfig, saveMaterialConfig,
+  DEFAULT_MATERIAL_CONFIG, loadMaterialConfig, saveMaterialConfig, recalculateDemoEstimation,
   type MaterialConfig,
 } from '@/lib/construction-data'
 
@@ -92,6 +92,7 @@ export default function ProjectMaterialConfigTab() {
 
   const handleSave = () => {
     saveMaterialConfig(config, projectId)
+    recalculateDemoEstimation(projectId, config)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -99,6 +100,7 @@ export default function ProjectMaterialConfigTab() {
   const handleReset = () => {
     setConfig(DEFAULT_MATERIAL_CONFIG)
     saveMaterialConfig(DEFAULT_MATERIAL_CONFIG, projectId)
+    recalculateDemoEstimation(projectId, DEFAULT_MATERIAL_CONFIG)
   }
 
   const selectedBrick = BRICK_CATALOG.find(b => b.id === config.brick_brand_id) || BRICK_CATALOG[0]

@@ -11,6 +11,8 @@ export default function Project3DBuildingTab() {
   const { id: projectId } = useParams() as { id: string }
 
   const [rooms, setRooms] = useState<any[]>([])
+  const [doors, setDoors] = useState<any[]>([])
+  const [windows, setWindows] = useState<any[]>([])
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null)
   const [selectedWall, setSelectedWall] = useState<{ roomId: string; wallIndex: number; length: number; thickness: number } | null>(null)
   const [floorHeight, setFloorHeight] = useState(3.0)
@@ -31,11 +33,16 @@ export default function Project3DBuildingTab() {
       .map(k => JSON.parse(localStorage.getItem(k) || '{}'))
       .find(p => p.project_id === projectId || p.id === projectId)
 
-    const isStaticDemo = projectId?.startsWith('demo_proj_') && (!planData || planData.filename === 'demo_layout.png' || planData.filename === 'demo_layout.jpg')
-    const hasMockRooms = planData?.detected_data?.rooms?.some((r: any) => ['r1', 'r2', 'r3', 'r4'].includes(r.id))
-
-    if (planData?.detected_data?.rooms && (!hasMockRooms || isStaticDemo)) {
+    const isDemoPlanFile = (filename?: string) => {
+      if (!filename) return true
+      const fn = filename.toLowerCase()
+      return fn.includes('demo_layout') || fn.includes('1000-sq-ft') || fn.includes('house-plan') || fn.includes('house_plan')
+    }
+    const isStaticDemo = projectId?.startsWith('demo_proj_') && isDemoPlanFile(planData?.filename)
+    if (planData?.detected_data?.rooms) {
       setRooms(planData.detected_data.rooms)
+      setDoors(planData.detected_data.doors || [])
+      setWindows(planData.detected_data.windows || [])
       setFloorHeight(planData.detected_data.floor_height_m || 3.0)
       setWallThickness(planData.detected_data.wall_thickness_m || 0.23)
       if (planData.detected_data.rooms.length > 0) {
@@ -243,6 +250,8 @@ export default function Project3DBuildingTab() {
         <div className="xl:col-span-3">
           <Building3DViewer
             rooms={rooms}
+            doors={doors}
+            windows={windows}
             floorHeight={floorHeight}
             scaleFactor={0.015}
             selectedRoomId={selectedRoomId}
