@@ -14,6 +14,8 @@ import '../../features/projects/presentation/screens/projects_screen.dart';
 import '../../features/upload/presentation/screens/upload_screen.dart';
 import '../../features/ai_assistant/presentation/screens/ai_chat_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
+import '../../features/analysis/presentation/screens/cv_analysis_screen.dart';
+import '../../features/estimation/presentation/screens/boq_materials_screen.dart';
 import '../widgets/buildwise_bottom_nav.dart';
 
 // Key for navigation
@@ -55,7 +57,28 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const OtpScreen(),
       ),
 
-      // Shell Route for Bottom Nav Bar
+      // Analysis (full-screen, no bottom nav)
+      GoRoute(
+        path: '/cv-analysis/:planId',
+        builder: (context, state) {
+          final planId = state.pathParameters['planId'] ?? '';
+          return CvAnalysisScreen(planId: planId);
+        },
+      ),
+
+      // BOQ Materials (full-screen, no bottom nav)
+      GoRoute(
+        path: '/boq',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return BoqMaterialsScreen(
+            projectName: extra['projectName'] as String? ?? 'Project',
+            totalCost: (extra['totalCost'] as num?)?.toDouble() ?? 0.0,
+          );
+        },
+      ),
+
+
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
         builder: (context, state, child) {

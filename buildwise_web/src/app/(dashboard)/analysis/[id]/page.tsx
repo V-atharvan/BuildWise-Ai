@@ -509,27 +509,27 @@ export default function AnalysisProgressPage() {
                 </div>
                 <div>
                   <label className="block text-[12px] font-bold text-black/50 dark:text-white/40 mb-1">Number of Floors</label>
-                  <input type="number" min={1} value={numFloors} onChange={(e) => setNumFloors(parseInt(e.target.value))}
+                  <input type="number" min={1} value={isNaN(numFloors) ? "" : numFloors} onChange={(e) => setNumFloors(parseInt(e.target.value) || 1)}
                     className="w-full px-3 py-2 rounded-xl bg-[#FAFAFC] dark:bg-[#252530] border border-black/[0.08] dark:border-white/[0.08] text-[13.5px] focus:outline-none focus:border-violet-500" />
                 </div>
                 <div>
                   <label className="block text-[12px] font-bold text-black/50 dark:text-white/40 mb-1">Floor Height (m)</label>
-                  <input type="number" step={0.1} value={floorHeight} onChange={(e) => setFloorHeight(parseFloat(e.target.value))}
+                  <input type="number" step={0.1} value={isNaN(floorHeight) ? "" : floorHeight} onChange={(e) => setFloorHeight(parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 rounded-xl bg-[#FAFAFC] dark:bg-[#252530] border border-black/[0.08] dark:border-white/[0.08] text-[13.5px] focus:outline-none focus:border-violet-500" />
                 </div>
                 <div>
                   <label className="block text-[12px] font-bold text-black/50 dark:text-white/40 mb-1">Total Built-up Area (sq ft)</label>
-                  <input type="number" value={totalArea} onChange={(e) => setTotalArea(parseInt(e.target.value))}
+                  <input type="number" value={isNaN(totalArea) ? "" : totalArea} onChange={(e) => setTotalArea(parseInt(e.target.value) || 0)}
                     className="w-full px-3 py-2 rounded-xl bg-[#FAFAFC] dark:bg-[#252530] border border-black/[0.08] dark:border-white/[0.08] text-[13.5px] focus:outline-none focus:border-violet-500" />
                 </div>
                 <div>
                   <label className="block text-[12px] font-bold text-black/50 dark:text-white/40 mb-1">Wall Thickness (m)</label>
-                  <input type="number" step={0.01} value={wallThickness} onChange={(e) => setWallThickness(parseFloat(e.target.value))}
+                  <input type="number" step={0.01} value={isNaN(wallThickness) ? "" : wallThickness} onChange={(e) => setWallThickness(parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 rounded-xl bg-[#FAFAFC] dark:bg-[#252530] border border-black/[0.08] dark:border-white/[0.08] text-[13.5px] focus:outline-none focus:border-violet-500" />
                 </div>
                 <div>
                   <label className="block text-[12px] font-bold text-black/50 dark:text-white/40 mb-1">Slab Thickness (m)</label>
-                  <input type="number" step={0.01} value={slabThickness} onChange={(e) => setSlabThickness(parseFloat(e.target.value))}
+                  <input type="number" step={0.01} value={isNaN(slabThickness) ? "" : slabThickness} onChange={(e) => setSlabThickness(parseFloat(e.target.value) || 0)}
                     className="w-full px-3 py-2 rounded-xl bg-[#FAFAFC] dark:bg-[#252530] border border-black/[0.08] dark:border-white/[0.08] text-[13.5px] focus:outline-none focus:border-violet-500" />
                 </div>
                 <div>

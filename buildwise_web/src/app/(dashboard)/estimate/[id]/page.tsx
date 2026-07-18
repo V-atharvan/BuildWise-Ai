@@ -5,13 +5,15 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import Link from 'next/link'
 import {
   ArrowLeft, Download, Share2, FileText, CheckCircle2, DollarSign,
-  Layers, Hammer, Package, Calculator, Loader2, Sparkles, Building
+  Layers, Hammer, Package, Calculator, Loader2, Sparkles, Building,
+  FileSpreadsheet, FileDown
 } from 'lucide-react'
 import { estimationApi, reportsApi } from '@/lib/api'
 import { formatCurrency, formatNumber, formatDate } from '@/lib/utils'
 import {
   PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend
 } from 'recharts'
+import { exportToExcel, exportToCSV, exportToPDF } from '@/lib/boq-generator'
 
 const COLORS = ['#7C3AED', '#A78BFA', '#C4B5FD', '#F59E0B', '#10B981', '#EF4444', '#3B82F6', '#6B7280']
 
@@ -247,20 +249,29 @@ export default function EstimatePage() {
           >
             <Share2 className="w-4.5 h-4.5 w-[18px] h-[18px]" />
           </button>
+          
           <button
-            onClick={() => reportMutation.mutate()}
-            disabled={reportMutation.isPending}
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-[13.5px] font-semibold transition-all shadow-lg shadow-violet-600/20"
+            onClick={() => exportToPDF(estimation, projectId)}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-black/[0.08] dark:border-white/[0.08] text-[13px] font-semibold hover:bg-black/[0.03] dark:hover:bg-white/[0.03] text-black/70 dark:text-white/60 transition-all"
+            title="Download PDF BOQ"
           >
-            {reportMutation.isPending ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Generating...
-              </>
-            ) : (
-              <>
-                <Download className="w-4 h-4" /> Download PDF BOQ
-              </>
-            )}
+            <FileDown className="w-4 h-4" /> PDF
+          </button>
+
+          <button
+            onClick={() => exportToExcel(estimation, projectId)}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-black/[0.08] dark:border-white/[0.08] text-[13px] font-semibold hover:bg-black/[0.03] dark:hover:bg-white/[0.03] text-black/70 dark:text-white/60 transition-all"
+            title="Export Excel sheet"
+          >
+            <FileSpreadsheet className="w-4 h-4" /> Excel
+          </button>
+
+          <button
+            onClick={() => exportToCSV(estimation, projectId)}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-black/[0.08] dark:border-white/[0.08] text-[13px] font-semibold hover:bg-black/[0.03] dark:hover:bg-white/[0.03] text-black/70 dark:text-white/60 transition-all"
+            title="Export CSV data"
+          >
+            <FileText className="w-4 h-4" /> CSV
           </button>
         </div>
       </div>

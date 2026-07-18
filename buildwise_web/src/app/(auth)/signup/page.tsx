@@ -138,6 +138,7 @@ export default function SignupPage() {
                 <input
                   {...register('full_name')}
                   placeholder="Atharva Kulkarni"
+                  autoComplete="off"
                   className="w-full px-4 py-3 rounded-2xl bg-white dark:bg-[#1E1E24] border border-black/[0.08] dark:border-white/[0.08] text-[14px] placeholder:text-black/25 dark:placeholder:text-white/20 focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15 transition-all"
                 />
                 {errors.full_name && <p className="mt-1 text-[12px] text-red-500">{errors.full_name.message}</p>}
@@ -149,6 +150,7 @@ export default function SignupPage() {
                 <input
                   {...register('company')}
                   placeholder="Optional"
+                  autoComplete="off"
                   className="w-full px-4 py-3 rounded-2xl bg-white dark:bg-[#1E1E24] border border-black/[0.08] dark:border-white/[0.08] text-[14px] placeholder:text-black/25 dark:placeholder:text-white/20 focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15 transition-all"
                 />
               </div>
@@ -162,6 +164,7 @@ export default function SignupPage() {
                 {...register('email')}
                 type="email"
                 placeholder="you@company.com"
+                autoComplete="off"
                 className="w-full px-4 py-3 rounded-2xl bg-white dark:bg-[#1E1E24] border border-black/[0.08] dark:border-white/[0.08] text-[14px] placeholder:text-black/25 dark:placeholder:text-white/20 focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15 transition-all"
               />
               {errors.email && <p className="mt-1 text-[12px] text-red-500">{errors.email.message}</p>}
@@ -176,6 +179,7 @@ export default function SignupPage() {
                   {...register('password')}
                   type={showPwd ? 'text' : 'password'}
                   placeholder="Minimum 8 characters"
+                  autoComplete="new-password"
                   className="w-full px-4 py-3 pr-11 rounded-2xl bg-white dark:bg-[#1E1E24] border border-black/[0.08] dark:border-white/[0.08] text-[14px] placeholder:text-black/25 dark:placeholder:text-white/20 focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15 transition-all"
                 />
                 <button type="button" onClick={() => setShowPwd(!showPwd)}
@@ -194,6 +198,7 @@ export default function SignupPage() {
                 {...register('confirm_password')}
                 type="password"
                 placeholder="Repeat your password"
+                autoComplete="new-password"
                 className="w-full px-4 py-3 rounded-2xl bg-white dark:bg-[#1E1E24] border border-black/[0.08] dark:border-white/[0.08] text-[14px] placeholder:text-black/25 dark:placeholder:text-white/20 focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15 transition-all"
               />
               {errors.confirm_password && <p className="mt-1 text-[12px] text-red-500">{errors.confirm_password.message}</p>}

@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1 import auth, projects, upload, ai, estimation, reports, admin
+from app.api.v1 import auth, projects, upload, ai, estimation, reports, admin, corrections, boq
 
 api_router = APIRouter()
 
@@ -10,6 +10,8 @@ api_router.include_router(ai.router, prefix="/ai", tags=["ai"])
 api_router.include_router(estimation.router, prefix="/estimation", tags=["estimation"])
 api_router.include_router(reports.router, prefix="/reports", tags=["reports"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
+api_router.include_router(corrections.router, prefix="/corrections", tags=["corrections"])
+api_router.include_router(boq.router, prefix="/boq", tags=["boq"])
 
 @api_router.get("/health", tags=["health"])
 async def health_check():

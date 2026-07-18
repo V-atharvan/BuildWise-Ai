@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>BuildWise AI | Premium Onboarding</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #09090B;
+            color: #e5e1e4;
+            overflow-x: hidden;
+        }
+        .glass-card {
+            background: rgba(25, 25, 30, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .glow-violet {
+            box-shadow: 0 0 25px 0 rgba(124, 58, 237, 0.25);
+        }
+        .input-focus-glow:focus-within {
+            box-shadow: inset 0 0 10px rgba(167, 139, 250, 0.1), 0 0 0 1px #A78BFA;
+        }
+        @keyframes breathing {
+            0%, 100% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.05); }
+        }
+        .ai-pulse {
+            animation: breathing 3s ease-in-out infinite;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-tertiary-fixed": "#21005e",
+                      "on-surface-variant": "#ccc3d8",
+                      "on-primary-container": "#ede0ff",
+                      "on-error-container": "#ffdad6",
+                      "tertiary-fixed": "#e8ddff",
+                      "on-secondary-container": "#c7aaff",
+                      "on-background": "#e5e1e4",
+                      "outline": "#958da1",
+                      "surface-container-high": "#2a2a2c",
+                      "on-primary": "#3f008e",
+                      "inverse-on-surface": "#313032",
+                      "on-primary-fixed-variant": "#5a00c6",
+                      "surface-container": "#201f22",
+                      "primary-container": "#7c3aed",
+                      "on-secondary-fixed-variant": "#5b00c5",
+                      "on-error": "#690005",
+                      "error": "#ffb4ab",
+                      "tertiary-fixed-dim": "#cebdff",
+                      "on-tertiary-container": "#ebe1ff",
+                      "secondary-fixed-dim": "#d3bbff",
+                      "on-tertiary": "#381385",
+                      "secondary": "#d3bbff",
+                      "primary-fixed-dim": "#d2bbff",
+                      "on-secondary": "#3f008d",
+                      "tertiary": "#cebdff",
+                      "tertiary-container": "#6f54bf",
+                      "surface-bright": "#39393b",
+                      "on-tertiary-fixed-variant": "#4f319c",
+                      "on-surface": "#e5e1e4",
+                      "surface-tint": "#d2bbff",
+                      "inverse-primary": "#732ee4",
+                      "outline-variant": "#4a4455",
+                      "secondary-fixed": "#ebddff",
+                      "background": "#131315",
+                      "error-container": "#93000a",
+                      "on-primary-fixed": "#25005a",
+                      "surface": "#131315",
+                      "secondary-container": "#5d03ca",
+                      "surface-dim": "#131315",
+                      "inverse-surface": "#e5e1e4",
+                      "surface-container-lowest": "#0e0e10",
+                      "primary-fixed": "#eaddff",
+                      "surface-container-highest": "#353437",
+                      "surface-container-low": "#1c1b1d",
+                      "surface-variant": "#353437",
+                      "primary": "#d2bbff",
+                      "on-secondary-fixed": "#250059"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "lg": "24px",
+                      "xl": "32px",
+                      "md": "16px",
+                      "xs": "4px",
+                      "container-padding": "20px",
+                      "sm": "8px",
+                      "base": "4px",
+                      "gutter": "12px"
+              },
+              "fontFamily": {
+                      "technical-sm": ["Inter"],
+                      "headline-md": ["Inter"],
+                      "body-lg": ["Inter"],
+                      "label-caps": ["Inter"],
+                      "headline-xl": ["Inter"],
+                      "headline-lg": ["Inter"],
+                      "body-md": ["Inter"]
+              },
+              "fontSize": {
+                      "technical-sm": ["12px", {"lineHeight": "1.4", "letterSpacing": "0.01em", "fontWeight": "500"}],
+                      "headline-md": ["20px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "body-lg": ["16px", {"lineHeight": "1.6", "letterSpacing": "0", "fontWeight": "400"}],
+                      "label-caps": ["11px", {"lineHeight": "1", "letterSpacing": "0.08em", "fontWeight": "700"}],
+                      "headline-xl": ["32px", {"lineHeight": "1.1", "letterSpacing": "-0.04em", "fontWeight": "900"}],
+                      "headline-lg": ["24px", {"lineHeight": "1.2", "letterSpacing": "-0.03em", "fontWeight": "800"}],
+                      "body-md": ["14px", {"lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400"}]
+              }
+            },
+          },
+        }
+      </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="min-h-screen flex flex-col items-center justify-start relative px-container-padding pb-xl pt-md bg-background">
+<!-- Atmospheric Background Element -->
+<div class="absolute top-0 left-0 w-full h-[442px] bg-gradient-to-b from-primary-container/20 to-transparent pointer-events-none"></div>
+<div class="absolute top-[-10%] left-1/2 -translate-x-1/2 w-[300px] h-[300px] bg-primary-container/30 blur-[120px] rounded-full pointer-events-none"></div>
+<!-- Top AppBar (Simplified for Onboarding) -->
+<header class="w-full flex justify-center items-center py-md z-50 mb-sm">
+<div class="flex flex-col items-center">
+<h1 class="font-headline-lg text-headline-lg font-black text-primary tracking-tighter">BuildWise AI</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant opacity-70 mt-1">AI-Powered Material Estimator &amp; BOQ Engine</p>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="w-full max-w-md flex flex-col items-center gap-lg z-10">
+<!-- Hero Illustration Area (Bento-style wrapper) -->
+<div class="w-full relative aspect-square max-h-[320px] rounded-[24px] overflow-hidden border border-white/10 group">
+<div class="absolute inset-0 bg-surface-container-low"></div>
+<img class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="A futuristic, high-tech architectural visualization showing a semi-transparent 3D building blueprint glowing in neon violet. Digital bounding boxes and technical data annotations float over structural columns and floor plans. The background is a deep charcoal black, creating a high-contrast engineering aesthetic with atmospheric light rays casting a soft violet hue over the intricate wireframe details." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDfwxg9uEragzmY7L4EHQ5Cvo72rEVPeVpTYz1IP6G-N9OaG2y4Wn2oD9Ewq525qe1e2z9XRokn9sdXh0uKEZ5-cb8X8_rW2ZRhQMe_8VJXj72OqbZG_tyNfd5iR8YliULt6yTKvqEhhDFyhYoYMaEUIKgHQ7K_u4qKBUoxa9OUrQhubLGLrD8qHxbzT2dGUDotvGxlgj7DordU3lDdll-s5u_m_cCl7Iena_ZbylKw6W5YthZB8dGABRMqPJOAPlnV7ifgDa2BnDU"/>
+<div class="absolute bottom-4 left-4 right-4 glass-card border border-white/10 rounded-xl p-3 flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-primary ai-pulse"></div>
+<span class="font-technical-sm text-technical-sm text-on-primary-container">Processing structural analysis...</span>
+</div>
+</div>
+<!-- Login Card -->
+<div class="w-full glass-card border border-white/10 rounded-[20px] p-lg flex flex-col gap-md">
+<div class="flex flex-col gap-xs mb-sm">
+<h2 class="font-headline-md text-headline-md text-on-surface">Welcome Back</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Sign in to manage your construction projects.</p>
+</div>
+<!-- Form Fields -->
+<div class="flex flex-col gap-md">
+<!-- Username/Email Field -->
+<div class="relative flex flex-col gap-xs group">
+<label class="font-label-caps text-label-caps text-on-surface-variant ml-1">Username / Email</label>
+<div class="flex items-center bg-[#18181C] border border-white/5 rounded-[12px] px-md py-3 focus-within:border-primary-container input-focus-glow transition-all">
+<span class="material-symbols-outlined text-on-surface-variant text-[20px] mr-2" data-icon="mail">mail</span>
+<input class="bg-transparent border-none p-0 text-body-md font-body-md text-on-surface w-full focus:ring-0 placeholder:text-on-surface-variant/30" placeholder="e.g. architect@firm.com" type="email"/>
+</div>
+</div>
+<!-- Password Field -->
+<div class="relative flex flex-col gap-xs group">
+<div class="flex justify-between items-center px-1">
+<label class="font-label-caps text-label-caps text-on-surface-variant">Password</label>
+<button class="font-label-caps text-label-caps text-primary hover:opacity-80 transition-opacity">Forgot?</button>
+</div>
+<div class="flex items-center bg-[#18181C] border border-white/5 rounded-[12px] px-md py-3 focus-within:border-primary-container input-focus-glow transition-all">
+<span class="material-symbols-outlined text-on-surface-variant text-[20px] mr-2" data-icon="lock">lock</span>
+<input class="bg-transparent border-none p-0 text-body-md font-body-md text-on-surface w-full focus:ring-0 placeholder:text-on-surface-variant/30" placeholder="••••••••" type="password"/>
+<span class="material-symbols-outlined text-on-surface-variant text-[20px] ml-2 cursor-pointer" data-icon="visibility">visibility</span>
+</div>
+</div>
+</div>
+<!-- Primary CTA -->
+<button class="w-full bg-primary-container text-on-primary-container font-headline-md text-headline-md py-4 rounded-full glow-violet hover:opacity-90 active:scale-95 transition-all mt-sm flex items-center justify-center gap-2">
+                Sign In / Register
+                <span class="material-symbols-outlined text-[20px]" data-icon="arrow_forward">arrow_forward</span>
+</button>
+<!-- Divider -->
+<div class="flex items-center gap-md py-2">
+<div class="h-[1px] flex-1 bg-white/5"></div>
+<span class="font-label-caps text-label-caps text-on-surface-variant/40">OR CONTINUE WITH</span>
+<div class="h-[1px] flex-1 bg-white/5"></div>
+</div>
+<!-- Social Auth Buttons -->
+<div class="grid grid-cols-2 gap-md">
+<button class="flex items-center justify-center gap-2 border border-white/10 rounded-full py-3 hover:bg-white/5 transition-colors group">
+<img alt="Google" class="w-5 h-5 grayscale group-hover:grayscale-0 transition-all" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC0YlfI53g7sqbc21dj5a6iwukLDyOk6BYO8dkAJ4jd4ERysP1ioQbx4cJuMmqoH2MlR1IDgMSEP40ialfWkiNa0CzsCgJNh3cr35WQUx0ui8TVPMZsGEyTzhUFgAaMkDOu4qqC3MiXMZSQNASwpTNgg9ke0jOhW5r6EwXSJxVlo45G8nE16TiE-ykM3Xl9jjCq8IjGfsCDk5zqCLIbKIdCQ4B_mJAZMy5RiKWBCO_VH4mQd8_IMTHT-0iJ4mFsNSg0FZ8czGnqwtA"/>
+<span class="font-body-md text-body-md text-on-surface">Google</span>
+</button>
+<button class="flex items-center justify-center gap-2 border border-white/10 rounded-full py-3 hover:bg-white/5 transition-colors">
+<span class="material-symbols-outlined text-on-surface text-[20px]" data-icon="apple" style="font-variation-settings: 'FILL' 1;">apps</span>
+<span class="font-body-md text-body-md text-on-surface">Apple</span>
+</button>
+</div>
+</div>
+<!-- Footer / Toggle -->
+<p class="font-body-md text-body-md text-on-surface-variant mt-sm">
+            New to BuildWise? <button class="text-primary font-bold">Contact Enterprise</button>
+</p>
+</main>
+<!-- Visual Floating Particles (Atmospheric) -->
+<div class="fixed top-1/4 right-0 w-24 h-24 bg-primary/10 blur-[40px] rounded-full -z-10"></div>
+<div class="fixed bottom-1/3 left-0 w-32 h-32 bg-secondary/5 blur-[50px] rounded-full -z-10"></div>
+<script>
+        // Micro-interactions for input fields
+        document.querySelectorAll('input').forEach(input => {
+            input.addEventListener('focus', () => {
+                input.parentElement.classList.add('border-primary-container');
+            });
+            input.addEventListener('blur', () => {
+                input.parentElement.classList.remove('border-primary-container');
+            });
+        });
+
+        // Simple feedback for social logins
+        const socialButtons = document.querySelectorAll('.grid button');
+        socialButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                btn.style.transform = 'scale(0.98)';
+                setTimeout(() => btn.style.transform = 'scale(1)', 100);
+            });
+        });
+    </script>
+</body></html>

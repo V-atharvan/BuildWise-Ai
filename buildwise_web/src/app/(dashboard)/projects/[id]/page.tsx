@@ -155,45 +155,6 @@ export default function ProjectDetailPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-4">
-          <Link
-            href="/projects"
-            className="p-2 rounded-xl border border-black/[0.08] dark:border-white/[0.08] hover:bg-black/[0.03] dark:hover:bg-white/[0.03] transition-all"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </Link>
-          <div>
-            <h2 className="text-2xl font-black tracking-tight">{project.name}</h2>
-            <p className="text-xs text-black/40 dark:text-white/35 mt-1 capitalize flex items-center gap-1.5">
-              <Building className="w-3.5 h-3.5" />
-              {project.building_type?.replace('_', ' ')} · Created {formatDate(project.created_at)}
-              {isDemo && (
-                <span className="ml-2 px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-semibold">
-                  Demo
-                </span>
-              )}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleDelete}
-            className="p-2.5 rounded-xl border border-red-500/20 text-red-500 hover:bg-red-500/5 transition-all"
-            title="Delete Project"
-          >
-            <Trash2 className="w-[18px] h-[18px]" />
-          </button>
-          <Link
-            href={`/upload?project_id=${project.id}`}
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-[13.5px] font-semibold transition-all shadow-lg shadow-violet-600/20"
-          >
-            <Upload className="w-4 h-4" /> Upload Drawing
-          </Link>
-        </div>
-      </div>
-
       {project.description && (
         <div className="bg-white dark:bg-[#1E1E24] rounded-3xl border border-black/[0.06] dark:border-white/[0.06] p-5">
           <h3 className="text-xs font-semibold text-black/40 dark:text-white/30 uppercase tracking-widest mb-1.5">Description</h3>
@@ -351,12 +312,20 @@ export default function ProjectDetailPage() {
                 Close
               </button>
             </div>
-            <div className="bg-[#0A192F] p-4 flex items-center justify-center min-h-[300px] max-h-[70vh] overflow-y-auto">
-              <img
-                src={viewingPlanUrl}
-                alt="Blueprint layout plan"
-                className="max-w-full max-h-full object-contain rounded-lg"
-              />
+            <div className="bg-[#0A192F] p-4 flex items-center justify-center min-h-[500px] h-[70vh] w-full overflow-hidden">
+              {viewingPlanName?.toLowerCase().endsWith('.pdf') || viewingPlanUrl?.startsWith('data:application/pdf') ? (
+                <iframe
+                  src={viewingPlanUrl}
+                  className="w-full h-full border-0 rounded-lg"
+                  title="PDF Drawing Viewer"
+                />
+              ) : (
+                <img
+                  src={viewingPlanUrl}
+                  alt="Blueprint layout plan"
+                  className="max-w-full max-h-full object-contain rounded-lg"
+                />
+              )}
             </div>
           </div>
         </div>

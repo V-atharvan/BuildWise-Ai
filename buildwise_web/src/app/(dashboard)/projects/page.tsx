@@ -217,7 +217,7 @@ export default function ProjectsPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           <AnimatePresence>
             {projects.map((project: any, i: number) => {
-              const StatusIcon = STATUS_ICONS[project.status] ?? Clock
+              const StatusIcon = (STATUS_ICONS[project.status] ?? Clock) as any
               return (
                 <motion.div
                   key={project.id}
@@ -285,7 +285,7 @@ export default function ProjectsPage() {
       ) : (
         <div className="bg-white dark:bg-[#1E1E24] rounded-[20px] border border-black/[0.06] dark:border-white/[0.06] divide-y divide-black/[0.05] dark:divide-white/[0.05] overflow-hidden">
           {projects.map((project: any) => {
-            const StatusIcon = STATUS_ICONS[project.status] ?? Clock
+            const StatusIcon = (STATUS_ICONS[project.status] ?? Clock) as any
             return (
               <Link
                 key={project.id}

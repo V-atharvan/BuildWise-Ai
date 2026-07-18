@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>BuildWise AI - Project Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                "on-tertiary-fixed": "#21005e",
+                "on-surface-variant": "#ccc3d8",
+                "on-primary-container": "#ede0ff",
+                "on-error-container": "#ffdad6",
+                "tertiary-fixed": "#e8ddff",
+                "on-secondary-container": "#c7aaff",
+                "on-background": "#e5e1e4",
+                "outline": "#958da1",
+                "surface-container-high": "#2a2a2c",
+                "on-primary": "#3f008e",
+                "inverse-on-surface": "#313032",
+                "on-primary-fixed-variant": "#5a00c6",
+                "surface-container": "#201f22",
+                "primary-container": "#7c3aed",
+                "on-secondary-fixed-variant": "#5b00c5",
+                "on-error": "#690005",
+                "error": "#ffb4ab",
+                "tertiary-fixed-dim": "#cebdff",
+                "on-tertiary-container": "#ebe1ff",
+                "secondary-fixed-dim": "#d3bbff",
+                "on-tertiary": "#381385",
+                "secondary": "#d3bbff",
+                "primary-fixed-dim": "#d2bbff",
+                "on-secondary": "#3f008d",
+                "tertiary": "#cebdff",
+                "tertiary-container": "#6f54bf",
+                "surface-bright": "#39393b",
+                "on-tertiary-fixed-variant": "#4f319c",
+                "on-surface": "#e5e1e4",
+                "surface-tint": "#d2bbff",
+                "inverse-primary": "#732ee4",
+                "outline-variant": "#4a4455",
+                "secondary-fixed": "#ebddff",
+                "background": "#09090B",
+                "error-container": "#93000a",
+                "on-primary-fixed": "#25005a",
+                "surface": "#131315",
+                "secondary-container": "#5d03ca",
+                "surface-dim": "#131315",
+                "inverse-surface": "#e5e1e4",
+                "surface-container-lowest": "#0e0e10",
+                "primary-fixed": "#eaddff",
+                "surface-container-highest": "#353437",
+                "surface-container-low": "#1c1b1d",
+                "surface-variant": "#353437",
+                "primary": "#d2bbff",
+                "on-secondary-fixed": "#250059"
+            },
+            "borderRadius": {
+                "DEFAULT": "0.25rem",
+                "lg": "0.5rem",
+                "xl": "0.75rem",
+                "2xl": "20px",
+                "full": "9999px"
+            },
+            "spacing": {
+                "lg": "24px",
+                "xl": "32px",
+                "md": "16px",
+                "xs": "4px",
+                "container-padding": "20px",
+                "sm": "8px",
+                "base": "4px",
+                "gutter": "12px"
+            },
+            "fontFamily": {
+                "technical-sm": ["Inter"],
+                "headline-md": ["Inter"],
+                "body-lg": ["Inter"],
+                "label-caps": ["Inter"],
+                "headline-xl": ["Inter"],
+                "headline-lg": ["Inter"],
+                "body-md": ["Inter"]
+            },
+            "fontSize": {
+                "technical-sm": ["12px", {"lineHeight": "1.4", "letterSpacing": "0.01em", "fontWeight": "500"}],
+                "headline-md": ["20px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                "body-lg": ["16px", {"lineHeight": "1.6", "letterSpacing": "0", "fontWeight": "400"}],
+                "label-caps": ["11px", {"lineHeight": "1", "letterSpacing": "0.08em", "fontWeight": "700"}],
+                "headline-xl": ["32px", {"lineHeight": "1.1", "letterSpacing": "-0.04em", "fontWeight": "900"}],
+                "headline-lg": ["24px", {"lineHeight": "1.2", "letterSpacing": "-0.03em", "fontWeight": "800"}],
+                "body-md": ["14px", {"lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #09090B;
+            color: #e5e1e4;
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .glass-card {
+            background: #111115;
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        }
+        .glass-sheet {
+            background: rgba(25, 25, 30, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .glow-violet { box-shadow: 0 0 20px rgba(124, 58, 237, 0.15); }
+        .glow-emerald { box-shadow: 0 0 20px rgba(16, 185, 129, 0.15); }
+        .glow-amber { box-shadow: 0 0 20px rgba(245, 158, 11, 0.15); }
+        .glow-sky { box-shadow: 0 0 20px rgba(14, 165, 233, 0.15); }
+        
+        .active-nav-glow {
+            filter: drop-shadow(0 0 8px rgba(210, 187, 255, 0.4));
+        }
+
+        @keyframes pulse-ai {
+            0%, 100% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.1); }
+        }
+        .ai-pulse { animation: pulse-ai 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="pb-32">
+<!-- Top App Bar -->
+<header class="fixed top-0 w-full z-50 bg-background/85 backdrop-blur-xl border-b border-white/5 flex justify-between items-center px-container-padding h-16">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full border border-white/10 overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A professional close-up portrait of a modern architect in a dark studio setting. The lighting is dramatic and moody, with violet and cool blue accents highlighting their features. The overall aesthetic is high-end, cinematic, and developer-centric, reflecting a premium BuildWise AI environment." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBUxi8qA4mOEl0xzrklt6Cm_ZdaVi5MmDS-3ITHqzDZBW_6XpYMlSgR8fbwBOZZxbAvPic19O0xdfRRc6qgUQPO0nOfX8lAXmsrJTU-PeqNUsu2FtmhcmvQ8jC7qR9LObkv-0Sc0_w53K2h4rQjQ-Wr6JMmEFCtfyJUxlAqmfRFXA0qqOqUG1uYWRAVyP1XNEYHFWqxVolhDm5rm8jN7TojnbuC6hdUavNx_f8ztAc2VM7-ltXi030IFAosOEMilPbb3XbjKqoeGHA"/>
+</div>
+<div>
+<p class="font-body-md text-[10px] text-on-surface-variant uppercase tracking-widest opacity-60">Architect Access</p>
+<h1 class="font-headline-md text-on-surface leading-tight">Good morning, Architect 👋</h1>
+</div>
+</div>
+<button class="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 hover:opacity-80 transition-opacity active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-primary text-[22px]" data-icon="dark_mode">dark_mode</span>
+</button>
+</header>
+<main class="mt-20 px-container-padding space-y-lg">
+<!-- Welcome Summary / Animated Element -->
+<section class="relative h-32 rounded-2xl overflow-hidden glass-card flex items-center px-md">
+
+<div class="relative z-10">
+<h2 class="font-headline-lg text-white">Project Insight</h2>
+<p class="font-body-md text-on-surface-variant max-w-[200px]">AI has analyzed 4 new blueprints since your last visit.</p>
+</div>
+</section>
+<!-- Quick Stats Grid (2x2) -->
+<section class="grid grid-cols-2 gap-gutter">
+<!-- Total Projects -->
+<div class="glass-card p-md rounded-2xl flex flex-col justify-between h-32 glow-violet">
+<div class="flex justify-between items-start">
+<span class="material-symbols-outlined text-[#7C3AED]" data-icon="grid_view">grid_view</span>
+<span class="font-label-caps text-[10px] bg-[#7C3AED]/10 text-[#7C3AED] px-2 py-0.5 rounded-full">Active</span>
+</div>
+<div>
+<p class="font-headline-xl text-white">12</p>
+<p class="font-label-caps text-on-surface-variant opacity-60">Total Projects</p>
+</div>
+</div>
+<!-- Completed Estimates -->
+<div class="glass-card p-md rounded-2xl flex flex-col justify-between h-32 glow-emerald">
+<div class="flex justify-between items-start">
+<span class="material-symbols-outlined text-emerald-400" data-icon="task_alt">task_alt</span>
+<span class="font-label-caps text-[10px] bg-emerald-400/10 text-emerald-400 px-2 py-0.5 rounded-full">Done</span>
+</div>
+<div>
+<p class="font-headline-xl text-white">8</p>
+<p class="font-label-caps text-on-surface-variant opacity-60">Completed Estimates</p>
+</div>
+</div>
+<!-- Daily Estimates -->
+<div class="glass-card p-md rounded-2xl flex flex-col justify-between h-32 glow-amber">
+<div class="flex justify-between items-start">
+<span class="material-symbols-outlined text-amber-400" data-icon="trending_up">trending_up</span>
+<span class="font-label-caps text-[10px] bg-amber-400/10 text-amber-400 px-2 py-0.5 rounded-full">Today</span>
+</div>
+<div>
+<p class="font-headline-xl text-white">2</p>
+<p class="font-label-caps text-on-surface-variant opacity-60">Daily Estimates</p>
+</div>
+</div>
+<!-- Saved Reports -->
+<div class="glass-card p-md rounded-2xl flex flex-col justify-between h-32 glow-sky">
+<div class="flex justify-between items-start">
+<span class="material-symbols-outlined text-sky-400" data-icon="description">description</span>
+<span class="font-label-caps text-[10px] bg-sky-400/10 text-sky-400 px-2 py-0.5 rounded-full">Cloud</span>
+</div>
+<div>
+<p class="font-headline-xl text-white">5</p>
+<p class="font-label-caps text-on-surface-variant opacity-60">Saved Reports</p>
+</div>
+</div>
+</section>
+<!-- Recent Projects Section -->
+<section class="space-y-md">
+<div class="flex justify-between items-end">
+<h3 class="font-headline-md text-on-surface">Recent Projects</h3>
+<button class="font-label-caps text-primary hover:opacity-80">View All</button>
+</div>
+<div class="space-y-sm">
+<!-- Project Card 1 -->
+<div class="glass-card p-md rounded-2xl flex items-center gap-md active:scale-[0.98] transition-transform">
+<div class="w-14 h-14 rounded-xl bg-white/5 flex items-center justify-center border border-white/5 overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A modern architectural rendering of a luxury Greenwood Villa. The scene is shot at twilight with warm interior lights contrasting against a deep blue sky. The visual style is crisp and detailed, emphasizing clean lines and high-end materials like wood and glass in a dark, premium aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC1Ti-dIQWpoTy94ciXLcrX1DYNOQm-JYjcRaeWZBtvdQ-u7J2pXoQHdYZkMbnVksCDY9ZqhUkl49yrcxibsTj9AkVb5RcD7ptWsW6mS9C8stpfWstJa-pG4XYK1Us-IQCemGLa2rs34vJb5HZ8-e6abwY4iflcJnXbBY1T0QFncMjx59zp0IOkzgFmtbmlpYUKGt9EPUFbIYUxtSt1O9PeRWJD_jIXd5TW5xv7Xre1Sq0CpOKEyD6dr5zngllc8FZjzvUy1PXOCig"/>
+</div>
+<div class="flex-1">
+<h4 class="font-headline-sm text-white text-md">Greenwood Villa</h4>
+<div class="flex items-center gap-2 mt-1">
+<span class="font-technical-sm text-on-surface-variant opacity-60">Residential</span>
+<span class="w-1 h-1 rounded-full bg-white/20"></span>
+<span class="font-technical-sm text-on-surface-variant opacity-60">2 hrs ago</span>
+</div>
+</div>
+<div class="flex flex-col items-end gap-2">
+<span class="px-2 py-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-bold rounded uppercase tracking-wider">Completed</span>
+<span class="material-symbols-outlined text-on-surface-variant text-sm" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+<!-- Project Card 2 -->
+<div class="glass-card p-md rounded-2xl flex items-center gap-md active:scale-[0.98] transition-transform">
+<div class="w-14 h-14 rounded-xl bg-white/5 flex items-center justify-center border border-white/5 overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Technical blueprint sketch of an office complex. The image uses a dark blueprint style with glowing violet digital overlays representing AI analysis paths. The mood is highly technical and precise, featuring a professional dark-mode design with subtle luminescence." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAx1GHNon6hpX3mVUAL46cCOz4kbBBvX6vHFy3Ho6kpzVb1aOjo4pbFou48aVBOPt733OgiVEVmV1soAGOg_0TCdHLxSDY8qTFXhxdgOjbHhk9Hn3l7o5IhEMrpzQBQvhcf7xLNHNzqnPwySXjFQEFnxjN9lrRHGHo69GG3aLIbdqfLADaOhWnjcjYvoAzsUUw60JrsDZub3WiqHG0PuDPNvS7UO5B1uwZXk2aQeNT1f5hvY8juZiYYUnqC9L5C3992pyei3oW5WtM"/>
+</div>
+<div class="flex-1">
+<h4 class="font-headline-sm text-white text-md">Skyline Office Hub</h4>
+<div class="flex items-center gap-2 mt-1">
+<span class="font-technical-sm text-on-surface-variant opacity-60">Commercial</span>
+<span class="w-1 h-1 rounded-full bg-white/20"></span>
+<span class="font-technical-sm text-on-surface-variant opacity-60">5 hrs ago</span>
+</div>
+</div>
+<div class="flex flex-col items-end gap-2">
+<div class="flex items-center gap-1.5 px-2 py-1 bg-amber-500/10 text-amber-400 text-[10px] font-bold rounded uppercase tracking-wider">
+<div class="w-1.5 h-1.5 rounded-full bg-amber-400 ai-pulse"></div>
+                            Analyzing
+                        </div>
+<span class="material-symbols-outlined text-on-surface-variant text-sm" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+<!-- Project Card 3 -->
+<div class="glass-card p-md rounded-2xl flex items-center gap-md active:scale-[0.98] transition-transform opacity-80">
+<div class="w-14 h-14 rounded-xl bg-white/5 flex items-center justify-center border border-white/5 overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="An industrial warehouse interior captured with a wide-angle lens. High-contrast lighting highlights the vast steel structure and concrete floor. The color palette is muted with deep blacks and cool grays, maintaining the premium developer-centric aesthetic of the BuildWise brand." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB-d5AuUpqL2KkMK757pJkLxxY3p4XR9_Oj_MDLLoKFAlEsp2uLlJNpGKm_iTIMijnLBc5PwjNIXsigiDpCjnArvxCZfXj2Qg_GqqiiiGYZI2JFJMg2HrIU6gaf0vm0aIKp7KIRhdxyJhmQrThsItUfQC6iwF0YU5t3OLQC_fFPOCiwbElHH14YyPKh3bQrWWMcbeiHyeutdG7DkeL_OlIZmMJozSrQtU8FqrP-JY05AXa9i4KYXMvKc5aLfmGusBjEycYzxCI_6GI"/>
+</div>
+<div class="flex-1">
+<h4 class="font-headline-sm text-white text-md">Westside Depot</h4>
+<div class="flex items-center gap-2 mt-1">
+<span class="font-technical-sm text-on-surface-variant opacity-60">Industrial</span>
+<span class="w-1 h-1 rounded-full bg-white/20"></span>
+<span class="font-technical-sm text-on-surface-variant opacity-60">Yesterday</span>
+</div>
+</div>
+<div class="flex flex-col items-end gap-2">
+<span class="px-2 py-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-bold rounded uppercase tracking-wider">Completed</span>
+<span class="material-symbols-outlined text-on-surface-variant text-sm" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Floating Action Button -->
+<button class="fixed bottom-24 right-container-padding w-16 h-16 bg-primary-container text-on-primary-container rounded-full flex items-center justify-center shadow-2xl shadow-primary-container/40 active:scale-90 transition-transform z-50 group">
+<div class="absolute inset-0 rounded-full bg-primary-container blur-md opacity-20 group-hover:opacity-40 transition-opacity"></div>
+<span class="material-symbols-outlined text-3xl relative z-10" data-icon="add">add</span>
+</button>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 w-full z-50 bg-surface-container/80 backdrop-blur-xl border-t border-white/5 rounded-t-2xl flex justify-around items-center h-20 px-2 pb-safe shadow-[0_-8px_20px_-10px_rgba(124,58,237,0.25)]">
+<!-- Home (Active) -->
+<a class="flex flex-col items-center justify-center text-primary font-bold transition-all active:scale-90" href="#">
+<span class="material-symbols-outlined text-2xl active-nav-glow" data-icon="grid_view" style="font-variation-settings: 'FILL' 1;">grid_view</span>
+<span class="font-label-caps text-[9px] mt-1">Home</span>
+</a>
+<!-- Projects -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90" href="#">
+<span class="material-symbols-outlined text-2xl" data-icon="architecture">architecture</span>
+<span class="font-label-caps text-[9px] mt-1">Projects</span>
+</a>
+<!-- Spacer for FAB if needed, but here we just list the 4 items from JSON + Prompt context -->
+<!-- AI Chat -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90" href="#">
+<span class="material-symbols-outlined text-2xl" data-icon="forum">forum</span>
+<span class="font-label-caps text-[9px] mt-1">Chat</span>
+</a>
+<!-- Settings -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors active:scale-90" href="#">
+<span class="material-symbols-outlined text-2xl" data-icon="settings">settings</span>
+<span class="font-label-caps text-[9px] mt-1">Settings</span>
+</a>
+</nav>
+<!-- Micro-interactions Script -->
+<script>
+        document.querySelectorAll('a, button').forEach(el => {
+            el.addEventListener('touchstart', function() {
+                this.classList.add('opacity-70');
+            });
+            el.addEventListener('touchend', function() {
+                this.classList.remove('opacity-70');
+            });
+        });
+    </script>
+</body></html>

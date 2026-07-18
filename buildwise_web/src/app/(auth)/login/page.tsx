@@ -86,7 +86,7 @@ export default function LoginPage() {
                 {...register('email')}
                 type="email"
                 placeholder="you@company.com"
-                autoComplete="email"
+                autoComplete="off"
                 className="w-full px-4 py-3 rounded-2xl bg-white dark:bg-[#1E1E24] border border-black/[0.08] dark:border-white/[0.08] text-[14px] placeholder:text-black/25 dark:placeholder:text-white/20 focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15 transition-all"
               />
               {errors.email && (
@@ -103,7 +103,7 @@ export default function LoginPage() {
                   {...register('password')}
                   type={showPwd ? 'text' : 'password'}
                   placeholder="••••••••"
-                  autoComplete="current-password"
+                  autoComplete="new-password"
                   className="w-full px-4 py-3 pr-11 rounded-2xl bg-white dark:bg-[#1E1E24] border border-black/[0.08] dark:border-white/[0.08] text-[14px] placeholder:text-black/25 dark:placeholder:text-white/20 focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15 transition-all"
                 />
                 <button

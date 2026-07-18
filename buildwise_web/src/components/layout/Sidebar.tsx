@@ -8,12 +8,13 @@ import { getUser, logout } from '@/lib/auth'
 import {
   LayoutDashboard, FolderOpen, Upload, FileText, MessageSquare,
   User, Settings, Shield, ChevronRight, Sun, Moon, Hexagon,
-  Bell, LogOut,
+  Bell, LogOut, Package, Map, Box, Lightbulb, Sparkles, FileSpreadsheet
 } from 'lucide-react'
 
 const navItems = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Projects', href: '/projects', icon: FolderOpen },
+  { label: 'Upload Drawing', href: '/upload', icon: Upload },
   { label: 'Reports', href: '/reports', icon: FileText },
   { label: 'AI Chat', href: '/chat', icon: MessageSquare, badge: 'AI' },
 ]

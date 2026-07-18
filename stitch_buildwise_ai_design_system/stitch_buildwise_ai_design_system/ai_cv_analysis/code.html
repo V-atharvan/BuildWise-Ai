@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #09090B;
+            color: #e5e1e4;
+            overflow: hidden; /* Prevent body scroll while using sheets */
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-sheet {
+            background: rgba(25, 25, 30, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .neon-green-glow {
+            box-shadow: 0 0 12px rgba(34, 197, 94, 0.4);
+            border: 2px solid rgba(34, 197, 94, 0.8);
+            background: rgba(34, 197, 94, 0.15);
+        }
+        .neon-orange-glow {
+            box-shadow: 0 0 10px rgba(249, 115, 22, 0.4);
+            border: 1.5px solid rgba(249, 115, 22, 0.8);
+            background: rgba(249, 115, 22, 0.1);
+        }
+        .ocr-callout {
+            filter: drop-shadow(0 0 4px rgba(124, 58, 237, 0.5));
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #7C3AED;
+            cursor: pointer;
+            box-shadow: 0 0 15px rgba(124, 58, 237, 0.6);
+            border: 2px solid #fff;
+        }
+        .blueprint-container {
+            mask-image: radial-gradient(circle at center, black 60%, transparent 100%);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed": "#21005e",
+                        "on-surface-variant": "#ccc3d8",
+                        "on-primary-container": "#ede0ff",
+                        "on-error-container": "#ffdad6",
+                        "tertiary-fixed": "#e8ddff",
+                        "on-secondary-container": "#c7aaff",
+                        "on-background": "#e5e1e4",
+                        "outline": "#958da1",
+                        "surface-container-high": "#2a2a2c",
+                        "on-primary": "#3f008e",
+                        "inverse-on-surface": "#313032",
+                        "on-primary-fixed-variant": "#5a00c6",
+                        "surface-container": "#201f22",
+                        "primary-container": "#7c3aed",
+                        "on-secondary-fixed-variant": "#5b00c5",
+                        "on-error": "#690005",
+                        "error": "#ffb4ab",
+                        "tertiary-fixed-dim": "#cebdff",
+                        "on-tertiary-container": "#ebe1ff",
+                        "secondary-fixed-dim": "#d3bbff",
+                        "on-tertiary": "#381385",
+                        "secondary": "#d3bbff",
+                        "primary-fixed-dim": "#d2bbff",
+                        "on-secondary": "#3f008d",
+                        "tertiary": "#cebdff",
+                        "tertiary-container": "#6f54bf",
+                        "surface-bright": "#39393b",
+                        "on-tertiary-fixed-variant": "#4f319c",
+                        "on-surface": "#e5e1e4",
+                        "surface-tint": "#d2bbff",
+                        "inverse-primary": "#732ee4",
+                        "outline-variant": "#4a4455",
+                        "secondary-fixed": "#ebddff",
+                        "background": "#131315",
+                        "error-container": "#93000a",
+                        "on-primary-fixed": "#25005a",
+                        "surface": "#131315",
+                        "secondary-container": "#5d03ca",
+                        "surface-dim": "#131315",
+                        "inverse-surface": "#e5e1e4",
+                        "surface-container-lowest": "#0e0e10",
+                        "primary-fixed": "#eaddff",
+                        "surface-container-highest": "#353437",
+                        "surface-container-low": "#1c1b1d",
+                        "surface-variant": "#353437",
+                        "primary": "#d2bbff",
+                        "on-secondary-fixed": "#250059"
+                    },
+                    "spacing": {
+                        "lg": "24px",
+                        "xl": "32px",
+                        "md": "16px",
+                        "xs": "4px",
+                        "container-padding": "20px",
+                        "sm": "8px",
+                        "base": "4px",
+                        "gutter": "12px"
+                    },
+                    "fontFamily": {
+                        "technical-sm": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "headline-xl": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "body-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "technical-sm": ["12px", {"lineHeight": "1.4", "letterSpacing": "0.01em", "fontWeight": "500"}],
+                        "headline-md": ["20px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-lg": ["16px", {"lineHeight": "1.6", "letterSpacing": "0", "fontWeight": "400"}],
+                        "label-caps": ["11px", {"lineHeight": "1", "letterSpacing": "0.08em", "fontWeight": "700"}],
+                        "headline-xl": ["32px", {"lineHeight": "1.1", "letterSpacing": "-0.04em", "fontWeight": "900"}],
+                        "headline-lg": ["24px", {"lineHeight": "1.2", "letterSpacing": "-0.03em", "fontWeight": "800"}],
+                        "body-md": ["14px", {"lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background min-h-screen flex flex-col items-center justify-start pb-20">
+<!-- Top App Bar -->
+<header class="fixed top-0 w-full z-50 bg-background/85 backdrop-blur-xl border-b border-white/5 flex justify-between items-center px-container-padding h-16">
+<div class="flex items-center gap-md">
+<button class="text-on-surface-variant hover:opacity-80 transition-opacity active:scale-95 transition-transform">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<h1 class="font-headline-md text-headline-md text-primary tracking-tighter">CV Visualizer</h1>
+</div>
+<div class="flex items-center gap-md">
+<button class="text-on-surface-variant hover:opacity-80 transition-opacity">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-primary-container/20 border border-primary/30 flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px] text-primary" style="font-variation-settings: 'FILL' 1;">person</span>
+</div>
+</div>
+</header>
+<!-- Main Blueprint Canvas -->
+<main class="w-full h-screen pt-16 relative overflow-hidden flex items-center justify-center bg-[#0e0e12]">
+<!-- Blueprint Base Image -->
+<div class="relative w-[90%] aspect-[4/5] blueprint-container">
+<div class="w-full h-full bg-cover bg-center rounded-xl opacity-60 mix-blend-screen" data-alt="A highly detailed architectural blueprint of a modern luxury apartment floor plan, displayed on a dark, high-contrast digital screen. The drawing is rendered in crisp white lines against a deep charcoal gray background. The scene is illuminated by neon atmospheric lighting, giving it a high-tech, computer-vision command center aesthetic, consistent with premium professional engineering software." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuD8-ZmvBAGXJx94S4mC5LSM8IwJ7CZM55YTP4r9zRDdFg6B8_EfVSo8uPVPD4PCMB5X_gEOLE5ElueOz5OjWClTGz54uiZr_REqEBIO4jm-8xOXFo8naeUwQinQFbO3ADnACDwsFly6VWvoX90i4Pzriw-8HdvGTnbCtqHjwI35MJWhDZJ2djP0O4H0lkw6lIKeMk0NeJRgUO1tuyJvCNpHmM6d_5YWelqvHNWoxNSssoVrxr-xHs1tNEfBTTsztQYY3F8zck8LygA')"></div>
+<!-- CV Overlays: Rooms -->
+<!-- Kitchen -->
+<div class="absolute top-[10%] left-[10%] w-[35%] h-[25%] neon-green-glow rounded-sm flex items-start justify-start p-2">
+<span class="bg-green-500 text-white font-label-caps text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wider">Kitchen: 12x14</span>
+</div>
+<!-- Living Room -->
+<div class="absolute top-[40%] left-[10%] w-[80%] h-[35%] neon-green-glow rounded-sm flex items-start justify-start p-2">
+<span class="bg-green-500 text-white font-label-caps text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wider">Living Room: 320sq ft</span>
+</div>
+<!-- Wall Segments -->
+<div class="absolute top-[10%] left-[45%] w-[2px] h-[25%] neon-orange-glow"></div>
+<div class="absolute top-[35%] left-[10%] w-[80%] h-[2px] neon-orange-glow"></div>
+<div class="absolute top-[75%] left-[10%] w-[30%] h-[2px] neon-orange-glow"></div>
+<!-- OCR Callouts -->
+<div class="absolute top-[33%] left-[50%] flex flex-col items-center ocr-callout">
+<div class="w-[1px] h-6 bg-primary"></div>
+<div class="bg-primary/90 text-white px-2 py-0.5 rounded-full font-technical-sm text-[10px] shadow-lg shadow-primary/20">
+                    24' - 6" CALIBRATED
+                </div>
+</div>
+<div class="absolute top-[55%] left-[5%] flex items-center ocr-callout">
+<div class="bg-secondary/90 text-on-secondary px-2 py-0.5 rounded-full font-technical-sm text-[10px] shadow-lg shadow-secondary/20">
+                    12' - 0" OCR
+                </div>
+<div class="w-4 h-[1px] bg-secondary"></div>
+</div>
+<!-- AI "Scanning" Line Animation -->
+<div class="absolute w-full h-[2px] bg-gradient-to-r from-transparent via-primary to-transparent opacity-50 z-10 top-0" id="scanner"></div>
+</div>
+<!-- Floating Action Controls (Top Layer of Canvas) -->
+<div class="absolute top-20 right-4 flex flex-col gap-sm">
+<button class="w-10 h-10 bg-surface-container-high/80 backdrop-blur-md rounded-lg flex items-center justify-center border border-white/10 text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">zoom_in</span>
+</button>
+<button class="w-10 h-10 bg-surface-container-high/80 backdrop-blur-md rounded-lg flex items-center justify-center border border-white/10 text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">zoom_out</span>
+</button>
+<button class="w-10 h-10 bg-surface-container-high/80 backdrop-blur-md rounded-lg flex items-center justify-center border border-white/10 text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">layers</span>
+</button>
+</div>
+</main>
+<!-- Analysis Slider Control -->
+<div class="fixed bottom-32 w-full px-container-padding z-40">
+<div class="bg-surface-container/60 backdrop-blur-md border border-white/5 rounded-2xl p-4">
+<div class="flex justify-between items-center mb-2">
+<span class="font-label-caps text-on-surface-variant">CV Confidence Threshold</span>
+<span class="font-technical-sm text-primary" id="confidence-val">85%</span>
+</div>
+<input class="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-primary" id="confidence-slider" max="100" min="0" type="range" value="85"/>
+</div>
+</div>
+<!-- Collapsible Bottom Sheet -->
+<div class="fixed bottom-0 left-0 w-full glass-sheet z-50 rounded-t-[24px] shadow-2xl transition-transform duration-300 transform translate-y-[60%] border-t border-white/10" id="bottom-sheet">
+<!-- Handlebar -->
+<div class="w-full flex justify-center py-4 cursor-pointer" onclick="toggleSheet()">
+<div class="w-12 h-1.5 bg-white/10 rounded-full"></div>
+</div>
+<div class="px-container-padding pb-8 max-h-[707px] overflow-y-auto">
+<div class="flex justify-between items-end mb-6">
+<div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface mb-1">Parsed Entities</h2>
+<p class="font-body-md text-on-surface-variant">Extracting dimensions from scan_v2.pdf</p>
+</div>
+<div class="bg-primary/10 px-3 py-1 rounded-full border border-primary/20 flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+<span class="font-label-caps text-primary">Live OCR</span>
+</div>
+</div>
+<!-- List of Parsed Rooms -->
+<div class="space-y-gutter">
+<!-- Item 1 -->
+<div class="bg-surface-container-low/50 border border-white/5 rounded-xl p-md flex items-center justify-between">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-green-500">weekend</span>
+</div>
+<div>
+<p class="font-body-lg font-bold text-on-surface">Living Room</p>
+<p class="font-technical-sm text-on-surface-variant">72 ft total wall</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-headline-md text-primary">320 <span class="text-xs text-on-surface-variant font-normal">sq ft</span></p>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="bg-surface-container-low/50 border border-white/5 rounded-xl p-md flex items-center justify-between">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-blue-500">bed</span>
+</div>
+<div>
+<p class="font-body-lg font-bold text-on-surface">Bedroom 1</p>
+<p class="font-technical-sm text-on-surface-variant">50 ft total wall</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-headline-md text-primary">150 <span class="text-xs text-on-surface-variant font-normal">sq ft</span></p>
+</div>
+</div>
+<!-- Item 3 -->
+<div class="bg-surface-container-low/50 border border-white/5 rounded-xl p-md flex items-center justify-between">
+<div class="flex items-center gap-md">
+<div class="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-orange-500">countertops</span>
+</div>
+<div>
+<p class="font-body-lg font-bold text-on-surface">Kitchen</p>
+<p class="font-technical-sm text-on-surface-variant">44 ft total wall</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-headline-md text-primary">120 <span class="text-xs text-on-surface-variant font-normal">sq ft</span></p>
+</div>
+</div>
+</div>
+<!-- Action Button -->
+<button class="w-full mt-lg h-14 bg-primary text-on-primary font-bold rounded-full flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all shadow-[0_0_20px_rgba(124,58,237,0.3)]">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">file_export</span>
+                Export Estimation Report
+            </button>
+</div>
+</div>
+<!-- Navigation Shell (Bottom NavBar) -->
+<nav class="fixed bottom-0 w-full z-50 bg-surface-container/80 backdrop-blur-xl border-t border-white/5 flex justify-around items-center h-20 px-2 pb-safe shadow-[0_-8px_20px_-10px_rgba(124,58,237,0.25)] rounded-t-xl">
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">grid_view</span>
+<span class="font-label-caps text-label-caps mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-primary font-bold active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">architecture</span>
+<span class="font-label-caps text-label-caps mt-1">Projects</span>
+</a>
+<button class="w-12 h-12 bg-primary rounded-full flex items-center justify-center shadow-lg shadow-primary/30 -mt-8">
+<span class="material-symbols-outlined text-on-primary">add</span>
+</button>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">forum</span>
+<span class="font-label-caps text-label-caps mt-1">Chat</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-caps text-label-caps mt-1">Settings</span>
+</a>
+</nav>
+<script>
+        // Toggle Bottom Sheet Logic
+        let sheetOpen = false;
+        function toggleSheet() {
+            const sheet = document.getElementById('bottom-sheet');
+            sheetOpen = !sheetOpen;
+            if (sheetOpen) {
+                sheet.style.transform = 'translateY(0%)';
+            } else {
+                sheet.style.transform = 'translateY(60%)';
+            }
+        }
+
+        // Scanner Animation
+        const scanner = document.getElementById('scanner');
+        let pos = 0;
+        let direction = 1;
+        function animateScanner() {
+            pos += 0.5 * direction;
+            if (pos >= 100 || pos <= 0) direction *= -1;
+            scanner.style.top = pos + '%';
+            requestAnimationFrame(animateScanner);
+        }
+        animateScanner();
+
+        // Confidence Slider Display Update
+        const slider = document.getElementById('confidence-slider');
+        const display = document.getElementById('confidence-val');
+        slider.oninput = function() {
+            display.innerText = this.value + '%';
+        }
+
+        // Micro-interaction: Active state feedback
+        document.querySelectorAll('button, a').forEach(el => {
+            el.addEventListener('mousedown', () => el.classList.add('scale-95'));
+            el.addEventListener('mouseup', () => el.classList.remove('scale-95'));
+            el.addEventListener('mouseleave', () => el.classList.remove('scale-95'));
+        });
+    </script>
+</body></html>

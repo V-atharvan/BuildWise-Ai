@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>BuildWise AI - BOQ Estimation</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-tertiary-fixed": "#21005e",
+                    "on-surface-variant": "#ccc3d8",
+                    "on-primary-container": "#ede0ff",
+                    "on-error-container": "#ffdad6",
+                    "tertiary-fixed": "#e8ddff",
+                    "on-secondary-container": "#c7aaff",
+                    "on-background": "#e5e1e4",
+                    "outline": "#958da1",
+                    "surface-container-high": "#2a2a2c",
+                    "on-primary": "#3f008e",
+                    "inverse-on-surface": "#313032",
+                    "on-primary-fixed-variant": "#5a00c6",
+                    "surface-container": "#201f22",
+                    "primary-container": "#7c3aed",
+                    "on-secondary-fixed-variant": "#5b00c5",
+                    "on-error": "#690005",
+                    "error": "#ffb4ab",
+                    "tertiary-fixed-dim": "#cebdff",
+                    "on-tertiary-container": "#ebe1ff",
+                    "secondary-fixed-dim": "#d3bbff",
+                    "on-tertiary": "#381385",
+                    "secondary": "#d3bbff",
+                    "primary-fixed-dim": "#d2bbff",
+                    "on-secondary": "#3f008d",
+                    "tertiary": "#cebdff",
+                    "tertiary-container": "#6f54bf",
+                    "surface-bright": "#39393b",
+                    "on-tertiary-fixed-variant": "#4f319c",
+                    "on-surface": "#e5e1e4",
+                    "surface-tint": "#d2bbff",
+                    "inverse-primary": "#732ee4",
+                    "outline-variant": "#4a4455",
+                    "secondary-fixed": "#ebddff",
+                    "background": "#09090B",
+                    "error-container": "#93000a",
+                    "on-primary-fixed": "#25005a",
+                    "surface": "#131315",
+                    "secondary-container": "#5d03ca",
+                    "surface-dim": "#131315",
+                    "inverse-surface": "#e5e1e4",
+                    "surface-container-lowest": "#0e0e10",
+                    "primary-fixed": "#eaddff",
+                    "surface-container-highest": "#353437",
+                    "surface-container-low": "#1c1b1d",
+                    "surface-variant": "#353437",
+                    "primary": "#d2bbff",
+                    "on-secondary-fixed": "#250059"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "lg": "24px",
+                    "xl": "32px",
+                    "md": "16px",
+                    "xs": "4px",
+                    "container-padding": "20px",
+                    "sm": "8px",
+                    "base": "4px",
+                    "gutter": "12px"
+            },
+            "fontFamily": {
+                    "technical-sm": ["Inter"],
+                    "headline-md": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "label-caps": ["Inter"],
+                    "headline-xl": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "body-md": ["Inter"]
+            },
+            "fontSize": {
+                    "technical-sm": ["12px", {"lineHeight": "1.4", "letterSpacing": "0.01em", "fontWeight": "500"}],
+                    "headline-md": ["20px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-lg": ["16px", {"lineHeight": "1.6", "letterSpacing": "0", "fontWeight": "400"}],
+                    "label-caps": ["11px", {"lineHeight": "1", "letterSpacing": "0.08em", "fontWeight": "700"}],
+                    "headline-xl": ["32px", {"lineHeight": "1.1", "letterSpacing": "-0.04em", "fontWeight": "900"}],
+                    "headline-lg": ["24px", {"lineHeight": "1.2", "letterSpacing": "-0.03em", "fontWeight": "800"}],
+                    "body-md": ["14px", {"lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #09090B;
+            font-family: 'Inter', sans-serif;
+            color: #e5e1e4;
+        }
+        .glass-sheet {
+            background: rgba(25, 25, 30, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .material-card {
+            background: #111115;
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .material-card:active {
+            transform: scale(0.98);
+            background: #18181C;
+        }
+        .primary-glow {
+            box-shadow: 0 0 25px rgba(124, 58, 237, 0.25);
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="min-h-screen pb-40">
+<!-- Top Navigation Anchor -->
+<header class="fixed top-0 w-full z-50 bg-background/85 backdrop-blur-xl border-b border-white/5 flex justify-between items-center px-container-padding h-16 w-full">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px] text-on-primary-container">architecture</span>
+</div>
+<span class="font-headline-lg text-headline-lg font-black text-primary tracking-tighter">BuildWise AI</span>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant hover:opacity-80 transition-opacity">dark_mode</span>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-white/10">
+<img class="w-full h-full object-cover" data-alt="Close up professional headshot of a modern architect wearing glasses, with a blurred high-tech architectural office in the background. The lighting is cool-toned with subtle purple highlights from computer screens, maintaining a clean and sophisticated dark-mode aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDjz4UF9kGX7_LX7s2Vc099D_W4Ibivs9IB9NtySPHfbvLrNF5brFoJPu8fodyRjHEL0vCwcMHfo7C37OmkzSktyLasH7u8CuE74zPq2UrElb4XWEwsdwudT1-A1qKEZuMoZxCbtZxtTBMlb3kcdgfK1V9o-PFIVE9u9M-GlymlxpqnMlHlxfP2fRSOMoYzh2Gde37muZOKZwACYJaNQP06QIj9QkLk1F9LPOt1j8GBeI4i3dvqZ0zHTXraM0oPX7loXDQ1lpUVxzY"/>
+</div>
+</div>
+</header>
+<!-- Sticky Hero Header -->
+<section class="mt-16 pt-lg px-container-padding pb-md sticky top-16 bg-background z-40">
+<div class="flex flex-col gap-xs">
+<span class="font-label-caps text-label-caps text-primary uppercase tracking-[0.2em]">Current Project</span>
+<h1 class="font-headline-lg text-headline-lg text-on-surface">Greenwood Villa</h1>
+</div>
+<div class="mt-md bg-surface-container-low border border-white/5 rounded-xl p-md flex flex-col items-center relative overflow-hidden">
+
+<span class="font-label-caps text-label-caps text-on-surface-variant z-10">Grand Total Estimated Cost</span>
+<div class="font-headline-xl text-headline-xl text-primary z-10 tracking-tighter mt-xs">$48,250.00</div>
+<div class="flex gap-sm mt-sm z-10">
+<div class="flex items-center gap-1 bg-white/5 px-2 py-1 rounded-full">
+<span class="material-symbols-outlined text-[12px] text-green-400">trending_down</span>
+<span class="font-technical-sm text-technical-sm text-green-400">-4.2% optimized</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Tab Switcher -->
+<nav class="px-container-padding sticky top-[280px] bg-background z-40 py-sm">
+<div class="flex bg-surface-container-high rounded-lg p-1">
+<button class="flex-1 py-2 font-label-caps text-label-caps text-on-primary-container bg-primary-container rounded-md transition-all">BOQ TABLE</button>
+<button class="flex-1 py-2 font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-colors">CALCULATIONS BREAKDOWN</button>
+</div>
+</nav>
+<!-- Material Cards List -->
+<main class="px-container-padding mt-md flex flex-col gap-md">
+<!-- Concrete Card -->
+<div class="material-card p-md rounded-xl">
+<div class="flex justify-between items-start mb-sm">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Concrete</h3>
+<p class="font-technical-sm text-technical-sm text-on-surface-variant">Grade M25 Foundation Mix</p>
+</div>
+<div class="bg-primary/10 px-2 py-1 rounded text-primary">
+<span class="font-label-caps text-label-caps">M01</span>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-md mt-md">
+<div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">QUANTITY</span>
+<p class="font-body-lg text-body-lg text-on-surface font-bold">42.5 m³</p>
+</div>
+<div class="text-right">
+<span class="font-label-caps text-label-caps text-on-surface-variant">TOTAL COST</span>
+<p class="font-body-lg text-body-lg text-primary font-black tracking-tight">$6,375.00</p>
+</div>
+</div>
+<div class="mt-md pt-md border-t border-white/5 flex justify-between items-center">
+<span class="font-technical-sm text-technical-sm text-on-surface-variant">Unit Rate: $150.00/m³</span>
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">chevron_right</span>
+</div>
+</div>
+<!-- Masonry Card -->
+<div class="material-card p-md rounded-xl">
+<div class="flex justify-between items-start mb-sm">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Masonry (Bricks)</h3>
+<p class="font-technical-sm text-technical-sm text-on-surface-variant">Standard Clay Bricks 230x110x75</p>
+</div>
+<div class="bg-primary/10 px-2 py-1 rounded text-primary">
+<span class="font-label-caps text-label-caps">M02</span>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-md mt-md">
+<div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">QUANTITY</span>
+<p class="font-body-lg text-body-lg text-on-surface font-bold">21,250 bricks</p>
+</div>
+<div class="text-right">
+<span class="font-label-caps text-label-caps text-on-surface-variant">TOTAL COST</span>
+<p class="font-body-lg text-body-lg text-primary font-black tracking-tight">$4,250.00</p>
+</div>
+</div>
+<div class="mt-md pt-md border-t border-white/5 flex justify-between items-center">
+<span class="font-technical-sm text-technical-sm text-on-surface-variant">Unit Rate: $0.20/brick</span>
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">chevron_right</span>
+</div>
+</div>
+<!-- Steel Rebar Card -->
+<div class="material-card p-md rounded-xl border-l-4 border-l-primary/50">
+<div class="flex justify-between items-start mb-sm">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Steel Rebar</h3>
+<p class="font-technical-sm text-technical-sm text-on-surface-variant">High-Tensile TMT Bars (12mm)</p>
+</div>
+<div class="bg-primary/10 px-2 py-1 rounded text-primary">
+<span class="font-label-caps text-label-caps">M04</span>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-md mt-md">
+<div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">QUANTITY</span>
+<p class="font-body-lg text-body-lg text-on-surface font-bold">3,400 kg</p>
+</div>
+<div class="text-right">
+<span class="font-label-caps text-label-caps text-on-surface-variant">TOTAL COST</span>
+<p class="font-body-lg text-body-lg text-primary font-black tracking-tight">$5,100.00</p>
+</div>
+</div>
+<div class="mt-md pt-md border-t border-white/5 flex justify-between items-center">
+<span class="font-technical-sm text-technical-sm text-on-surface-variant">Unit Rate: $1.50/kg</span>
+<div class="flex items-center gap-1 text-primary">
+<span class="font-technical-sm text-technical-sm">High Value Item</span>
+<span class="material-symbols-outlined text-[16px]">priority_high</span>
+</div>
+</div>
+</div>
+<!-- Mortar Card -->
+<div class="material-card p-md rounded-xl">
+<div class="flex justify-between items-start mb-sm">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Mortar</h3>
+<p class="font-technical-sm text-technical-sm text-on-surface-variant">1:4 Cement Sand Ratio</p>
+</div>
+<div class="bg-primary/10 px-2 py-1 rounded text-primary">
+<span class="font-label-caps text-label-caps">M03</span>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-md mt-md">
+<div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">QUANTITY</span>
+<p class="font-body-lg text-body-lg text-on-surface font-bold">6.2 m³</p>
+</div>
+<div class="text-right">
+<span class="font-label-caps text-label-caps text-on-surface-variant">TOTAL COST</span>
+<p class="font-body-lg text-body-lg text-primary font-black tracking-tight">$1,240.00</p>
+</div>
+</div>
+<div class="mt-md pt-md border-t border-white/5 flex justify-between items-center">
+<span class="font-technical-sm text-technical-sm text-on-surface-variant">Unit Rate: $200.00/m³</span>
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">chevron_right</span>
+</div>
+</div>
+</main>
+<!-- Action Footer Actions -->
+<div class="fixed bottom-20 left-0 w-full px-container-padding pb-6 bg-gradient-to-t from-background via-background to-transparent pt-12 z-40">
+<div class="flex flex-col gap-sm">
+<button class="w-full bg-primary-container text-on-primary-container h-14 rounded-full font-headline-md flex items-center justify-center gap-2 primary-glow active:scale-95 transition-transform">
+<span class="material-symbols-outlined">send</span>
+                Share BOQ with Contractor
+            </button>
+<button class="w-full border border-white/10 bg-surface-container/50 backdrop-blur-md text-on-surface h-14 rounded-full font-headline-md flex items-center justify-center gap-2 hover:bg-white/5 active:scale-95 transition-transform">
+<span class="material-symbols-outlined">picture_as_pdf</span>
+                Export PDF
+            </button>
+</div>
+</div>
+<!-- Bottom Navigation Shell -->
+<nav class="fixed bottom-0 w-full z-50 rounded-t-xl bg-surface-container/80 backdrop-blur-xl border-t border-white/5 shadow-[0_-8px_20px_-10px_rgba(124,58,237,0.25)] flex justify-around items-center h-20 px-2 pb-safe w-full">
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">grid_view</span>
+<span class="font-label-caps text-label-caps mt-1">Home</span>
+</div>
+<div class="flex flex-col items-center justify-center text-primary font-bold active:scale-90 transition-transform">
+<span class="material-symbols-outlined">architecture</span>
+<span class="font-label-caps text-label-caps mt-1">Projects</span>
+</div>
+<div class="w-12 h-12 bg-primary-container rounded-full flex items-center justify-center text-on-primary-container shadow-lg active:scale-95 transition-all">
+<span class="material-symbols-outlined">add</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">forum</span>
+<span class="font-label-caps text-label-caps mt-1">Chat</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-caps text-label-caps mt-1">Settings</span>
+</div>
+</nav>
+<script>
+        // Simple active state toggle for tabs
+        document.querySelectorAll('nav button').forEach(btn => {
+            btn.addEventListener('click', function() {
+                if (!this.classList.contains('bg-primary-container')) {
+                    document.querySelector('nav button.bg-primary-container').classList.remove('bg-primary-container', 'text-on-primary-container');
+                    document.querySelector('nav button.text-on-surface-variant').classList.add('text-on-surface-variant');
+                    
+                    this.classList.remove('text-on-surface-variant');
+                    this.classList.add('bg-primary-container', 'text-on-primary-container');
+                }
+            });
+        });
+
+        // Feedback on card interaction
+        document.querySelectorAll('.material-card').forEach(card => {
+            card.addEventListener('touchstart', () => {
+                card.style.borderColor = 'rgba(124, 58, 237, 0.4)';
+            });
+            card.addEventListener('touchend', () => {
+                card.style.borderColor = 'rgba(255, 255, 255, 0.07)';
+            });
+        });
+    </script>
+</body></html>
