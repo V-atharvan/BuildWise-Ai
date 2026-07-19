@@ -110,7 +110,6 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
     { label: 'Material Config', href: `/projects/${project.id}/material-config`, icon: Package },
     { label: 'BOQ', href: `/projects/${project.id}/boq`, icon: FileSpreadsheet },
     { label: 'AI Suggestions', href: `/projects/${project.id}/ai-suggestions`, icon: Sparkles },
-    { label: 'Report & PDF', href: `/projects/${project.id}/report`, icon: FileText },
   ]
 
   return (
