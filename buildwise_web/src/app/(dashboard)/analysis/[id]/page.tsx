@@ -15,6 +15,7 @@ import { estimationApi } from '@/lib/api'
 import { runFloorPlanPipeline, runDemoPipeline, PIPELINE_STEPS } from '@/lib/floor-plan-ai/pipeline'
 import { getGeminiApiKey, setGeminiApiKey, validateGeminiKey } from '@/lib/floor-plan-ai/gemini-analyzer'
 import type { PipelineStep, FloorPlanAnalysisResult } from '@/lib/floor-plan-ai/types'
+import { calculateTakeoff } from '@/lib/estimation-engine'
 
 // ── Step icon mapping ────────────────────────────────────────────────────────
 const STEP_ICONS: Record<string, React.ReactNode> = {
@@ -33,68 +34,74 @@ const STEP_ICONS: Record<string, React.ReactNode> = {
 
 // ── Local demo calculation (no backend) ─────────────────────────────────────
 function runDemoCalculation(params: Record<string, any>, projectId: string, router: ReturnType<typeof useRouter>) {
-  const demoEstId = `demo_est_${Date.now()}`
-  const area = parseFloat(params.total_area || 0)
-  const floors = parseInt(params.num_floors || 1)
-  const ht = parseFloat(params.floor_height || 3.0)
-  const wt = parseFloat(params.wall_thickness || 0.23)
-  const st = parseFloat(params.slab_thickness || 0.12)
-  const cg = (params.concrete_grade || 'M20').toUpperCase()
-  const ft = (params.foundation_type || 'isolated').toLowerCase()
-  const bt = (params.brick_type || 'red_brick').toLowerCase()
-  const waste = 1 + parseFloat(params.waste_percentage || 5) / 100
-
-  const areaM2 = area * 0.092903
-  const footprintM2 = areaM2 / floors
-  const length = Math.sqrt(footprintM2) * 1.25
-  const width = footprintM2 / length
-  const perimeterM = 2 * (length + width)
-  const wallVolumeM3 = perimeterM * ht * wt * floors * 0.90
-  const slabConcrete = footprintM2 * st * floors
-  const foundationRatios: Record<string, number> = { combined: 0.25, raft: 0.40, pile: 0.30, isolated: 0.20 }
-  const totalConcreteVolume = slabConcrete * 1.15 + (slabConcrete * (foundationRatios[ft] || 0.20))
-  const totalSteelWeight = totalConcreteVolume * 85.0
-  const bricksCount = bt === 'red_brick' ? Math.ceil(wallVolumeM3 * 500) : 0
-  const mixRatios: Record<string, number[]> = { M10:[1,3,6], M15:[1,2,4], M20:[1,1.5,3], M25:[1,1,2], M30:[1,0.75,1.5] }
-  const ratio = mixRatios[cg] || [1,1.5,3]
-  const rSum = ratio.reduce((a,b)=>a+b,0)
-  const dryVol = totalConcreteVolume * 1.54
-  const totalCementBags = Math.ceil((ratio[0]/rSum * dryVol / 0.0347) * waste)
-  const totalSandM3 = ratio[1]/rSum * dryVol * waste
-  const totalAggM3 = ratio[2]/rSum * dryVol * waste
-  const totalPlasterArea = 2.2 * areaM2 + perimeterM * ht * floors
-  const paintArea = totalPlasterArea * 1.2
-  const tilesArea = areaM2
-  const waterproofingArea = footprintM2 + areaM2 * 0.12
-  const excavationVolume = footprintM2 * 0.35 * 1.5
-  const concreteCost = Math.round(totalConcreteVolume * waste * 5500)
-  const steelCost = Math.round(totalSteelWeight * waste * 75)
-  const cementCost = Math.round(totalCementBags * 430)
-  const sandCost = Math.round(totalSandM3 * 1400)
-  const aggCost = Math.round(totalAggM3 * 1600)
-  const brickCost = Math.round(bricksCount * waste * 10)
-  const plasterCost = Math.round(totalPlasterArea * waste * 280)
-  const paintCost = Math.round(paintArea * waste * 120)
-  const tilesCost = Math.round(tilesArea * waste * 650)
-  const waterproofingCost = Math.round(waterproofingArea * waste * 380)
-  const excavationCost = Math.round(excavationVolume * 200)
-  const totalMatCost = concreteCost+steelCost+cementCost+sandCost+aggCost+brickCost+plasterCost+paintCost+tilesCost+waterproofingCost+excavationCost
-  const labourCost = Math.round(totalMatCost * 0.30)
-  const equipmentCost = Math.round(totalMatCost * 0.05)
-  const baseExec = totalMatCost + labourCost + equipmentCost
-  const contractor = Math.round(baseExec * 0.10)
-  const contingency = Math.round(baseExec * 0.05)
-  const taxable = baseExec + contractor + contingency
-  const gst = Math.round(taxable * 0.18)
-  const grandTotal = taxable + gst
-  const demoEst = {
-    id: demoEstId, project_id: projectId, user_inputs: params,
-    materials: { concrete_volume: +(totalConcreteVolume*waste).toFixed(2), steel_weight: +(totalSteelWeight*waste).toFixed(0), cement_bags: totalCementBags, sand_volume: +totalSandM3.toFixed(2), aggregate_volume: +totalAggM3.toFixed(2), bricks_count: bt==='red_brick'?Math.ceil(bricksCount*waste):0, blocks_count: 0, mortar_volume: +(wallVolumeM3*0.30*waste).toFixed(2), plaster_area: +(totalPlasterArea*waste).toFixed(2), paint_area: +(paintArea*waste).toFixed(2), tiles_area: +(tilesArea*waste).toFixed(2), waterproofing_area: +(waterproofingArea*waste).toFixed(2), excavation_volume: +excavationVolume.toFixed(2), formwork_area: +(totalConcreteVolume*4.5).toFixed(2), glass_area: +(areaM2*0.08).toFixed(2), doors_count: floors*4, windows_count: floors*6 },
-    cost_breakdown: { concrete_cost:concreteCost, steel_cost:steelCost, cement_cost:cementCost, sand_cost:sandCost, aggregate_cost:aggCost, brick_cost:brickCost, block_cost:0, mortar_cost:0, plaster_cost:plasterCost, paint_cost:paintCost, tiles_cost:tilesCost, waterproofing_cost:waterproofingCost, excavation_cost:excavationCost, labour_cost:labourCost, equipment_cost:equipmentCost, total_material_cost:totalMatCost, gst_amount:gst, contractor_margin:contractor, contingency, grand_total:grandTotal },
-    total_cost: grandTotal, currency: 'INR', created_at: new Date().toISOString(),
+  // Load plan geometry from localStorage
+  let planData: any = null
+  try {
+    const keys = Object.keys(localStorage)
+    const planKey = keys.find(k => 
+      k.startsWith('bw_demo_plan_') && 
+      (k.endsWith(projectId) || 
+       JSON.parse(localStorage.getItem(k) || '{}').id === projectId || 
+       JSON.parse(localStorage.getItem(k) || '{}').project_id === projectId)
+    )
+    if (planKey) {
+      const planRaw = localStorage.getItem(planKey)
+      if (planRaw) {
+        planData = JSON.parse(planRaw).detected_data
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load plan geometry from localStorage', e)
   }
-  localStorage.setItem(`bw_demo_est_${demoEstId}`, JSON.stringify(demoEst))
-  router.push(`/estimate/${projectId}?estimation_id=${demoEstId}`)
+
+  // Fallback if no plan found in localStorage
+  if (!planData) {
+    planData = {
+      rooms: [
+        { id: 'room_1', label: 'Living Room', area_m2: 24.5, perimeter_m: 20.0, classification: { classified_label: 'living_room', confidence: { overall: 0.95 }, low_confidence_flag: false } },
+        { id: 'room_2', label: 'Master Bedroom', area_m2: 18.0, perimeter_m: 17.0, classification: { classified_label: 'bedroom', confidence: { overall: 0.92 }, low_confidence_flag: false } },
+        { id: 'room_3', label: 'Kitchen', area_m2: 12.5, perimeter_m: 14.5, classification: { classified_label: 'kitchen', confidence: { overall: 0.88 }, low_confidence_flag: false } },
+        { id: 'room_4', label: 'Bathroom', area_m2: 6.0, perimeter_m: 10.0, classification: { classified_label: 'bathroom', confidence: { overall: 0.94 }, low_confidence_flag: false } }
+      ],
+      walls: [
+        { id: 'wall_1', length_m: 8.0, thickness_m: 0.23, room_ids: ['room_1'] },
+        { id: 'wall_2', length_m: 6.0, thickness_m: 0.23, room_ids: ['room_1', 'room_2'] },
+        { id: 'wall_3', length_m: 5.5, thickness_m: 0.23, room_ids: ['room_2', 'room_3'] },
+        { id: 'wall_4', length_m: 4.0, thickness_m: 0.15, room_ids: ['room_3', 'room_4'] },
+        { id: 'wall_5', length_m: 7.2, thickness_m: 0.23, room_ids: ['room_1', 'room_3'] }
+      ],
+      doors: [
+        { id: 'door_1', wall_id: 'wall_1', width_m: 1.0, height_m: 2.1 },
+        { id: 'door_2', wall_id: 'wall_3', width_m: 0.9, height_m: 2.1 }
+      ],
+      windows: [
+        { id: 'win_1', wall_id: 'wall_1', width_m: 1.5, height_m: 1.2 },
+        { id: 'win_2', wall_id: 'wall_5', width_m: 1.2, height_m: 1.2 }
+      ],
+      columns: [],
+      staircases: [],
+      total_area_m2: 64.4,
+      drawing_classification: { drawing_type: 'architectural', confidence: 0.95 }
+    }
+  }
+
+  const result = calculateTakeoff(planData, {
+    building_type: params.building_type,
+    num_floors: parseInt(params.num_floors || 1),
+    floor_height: parseFloat(params.floor_height || 3.0),
+    wall_thickness: parseFloat(params.wall_thickness || 0.23),
+    slab_thickness: parseFloat(params.slab_thickness || 0.12),
+    concrete_grade: params.concrete_grade || 'M20',
+    steel_grade: params.steel_grade || 'Fe500',
+    mortar_ratio: params.mortar_ratio || '1:5',
+    foundation_type: params.foundation_type || 'isolated',
+    roof_type: params.roof_type || 'flat_rcc',
+    brick_type: params.brick_type || 'red_brick',
+    waste_percentage: parseFloat(params.waste_percentage || 5)
+  })
+
+  localStorage.setItem(`bw_demo_est_${result.id}`, JSON.stringify(result))
+  router.push(`/estimate/${projectId}?estimation_id=${result.id}`)
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -320,6 +327,33 @@ export default function AnalysisProgressPage() {
       { id: 'w3', wall_id: 'w2', room_id: 'r3', center: [100,500], width_m: 1.0, height_m: 1.0, sill_height_m: 1.0, confidence: 0.85 },
     ]
 
+    const demoColumns = [
+      { id: 'col_1', shape: 'square', center: [100, 100], width_px: 30, height_px: 30, size_m: [0.45, 0.45] as [number, number], connected_beam_ids: [], confidence: 0.98 },
+      { id: 'col_2', shape: 'square', center: [466, 100], width_px: 30, height_px: 30, size_m: [0.45, 0.45] as [number, number], connected_beam_ids: [], confidence: 0.95 },
+      { id: 'col_3', shape: 'square', center: [766, 100], width_px: 30, height_px: 30, size_m: [0.45, 0.45] as [number, number], connected_beam_ids: [], confidence: 0.96 },
+      { id: 'col_4', shape: 'square', center: [100, 400], width_px: 30, height_px: 30, size_m: [0.45, 0.45] as [number, number], connected_beam_ids: [], confidence: 0.94 },
+    ]
+
+    const demoStaircases = [
+      { id: 'staircase_1', stair_type: 'dog_leg', start_px: [120, 300], end_px: [200, 380], direction: 'up', num_flights: 2, landing_detected: true, confidence: 0.92 }
+    ]
+
+    const demoClassification = {
+      drawing_type: 'architectural',
+      confidence: 0.99,
+      is_architectural_floor_plan: true
+    }
+
+    const demoQuality = {
+      score: 85,
+      problems: ['Slight Noise'],
+      recommendations: ['Optimal image contrast. Ready for structural estimation.'],
+      brightness: 180,
+      contrast: 150,
+      blur_index: 8.5,
+      is_skewed: false
+    }
+
     const activeProjectId = projectId || planId
     const stored = localStorage.getItem(`bw_demo_plan_${planId}`)
     const plan = stored ? JSON.parse(stored) : {}
@@ -335,6 +369,10 @@ export default function AnalysisProgressPage() {
         walls: demoWalls,
         doors: demoDoors,
         windows: demoWindows,
+        columns: demoColumns,
+        staircases: demoStaircases,
+        drawing_classification: demoClassification,
+        image_quality: demoQuality,
         floor_height_m: 3.0,
         wall_thickness_m: 0.23,
         total_area_m2: 59.8,

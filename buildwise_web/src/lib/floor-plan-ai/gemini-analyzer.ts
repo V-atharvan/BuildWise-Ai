@@ -8,6 +8,8 @@ import type {
   AIRoom, AIWall, AIDoor, AIWindow,
   ScaleInfo, OCRTextRegion,
   RoomType, PipelineOptions,
+  AIColumn, AIStaircase, DrawingClassification, DrawingType,
+  GeometryRelationships
 } from './types'
 
 // ── Gemini API Configuration ────────────────────────────────────────────────
@@ -18,26 +20,32 @@ export type GeminiModel = 'gemini-3.5-flash' | 'gemini-3.1-flash-lite' | 'gemini
 
 // ── Structured JSON Schema Prompt ──────────────────────────────────────────
 
-const FLOOR_PLAN_SYSTEM_PROMPT = `You are an expert AI Architect and Building Information Modelling (BIM) specialist with 20+ years of experience reading architectural floor plans.
+const FLOOR_PLAN_SYSTEM_PROMPT = `You are a Principal Computer Vision Engineer, AI Research Scientist, BIM Specialist, Architectural Drawing Analyst, and Geometric Modeling Expert.
 
-Your task is to analyze the provided architectural floor plan image with maximum accuracy and output a precise, structured JSON describing the building.
+Your task is to analyze the provided building plan image with maximum accuracy and output a precise, structured JSON describing the building.
 
 CRITICAL RULES:
-1. ACCURACY IS PARAMOUNT. Never guess if you are uncertain. Mark uncertain elements with low confidence scores.
-2. Do NOT use simple bounding boxes for rooms. Extract the actual polygon vertices of each room boundary.
-3. For rooms with confidence below 0.90, set low_confidence_flag to true and needs_user_confirmation to true.
-4. Read ALL text visible in the drawing using OCR. Room labels are the primary classification signal.
-5. Detect walls as line segments with start/end coordinates in pixel space.
-6. Associate every door and window with its containing wall.
-7. The coordinate system is [x, y] where [0,0] is top-left of the image.
-8. All pixel coordinates must be within the image bounds.
+1. GEOMETRIC ACCURACY IS PARAMOUNT. Never guess if you are uncertain. Mark uncertain elements with low confidence scores.
+2. Separate AI geometric detection from engineering calculations. This module only detects geometry (walls, rooms, columns, staircases, doors, windows).
+3. Do NOT use simple bounding boxes for rooms. Extract the actual polygon vertices of each room boundary.
+4. Read ALL text visible in the drawing using OCR. Analyze dimensions (feet-inches or millimeters) and labels carefully.
+5. If the uploaded drawing is NOT an architectural floor plan (e.g. if it is structural, HVAC, plumbing, or detail drawing), classify it as such and generate a warning.
+6. Detect columns as square, rectangular, or circular meshes with exact positions.
+7. Detect staircases as straight, dog-leg, spiral, or L-shaped structures with landing detection and flight paths.
+8. All coordinates are in pixel space: [x, y] where [0,0] is top-left of the image.
 
 OUTPUT FORMAT: Return ONLY valid JSON matching the schema below. No markdown, no explanation text.`
 
 function buildAnalysisPrompt(imageWidth: number, imageHeight: number, floorHeightHint: number, wallThicknessHint: number): string {
-  return `Analyze this architectural floor plan image (${imageWidth}×${imageHeight} pixels) and return a JSON object with the following structure:
+  return `Analyze this architectural drawing (${imageWidth}×${imageHeight} pixels) and return a JSON object with the following structure:
 
 {
+  "drawing_classification": {
+    "drawing_type": "architectural|structural|electrical|plumbing|hvac|roof_plan|elevation|section|furniture_layout|unknown",
+    "confidence": <0-1>,
+    "is_architectural_floor_plan": <boolean>,
+    "warning_message": "<string warning if not an architectural floor plan>"
+  },
   "scale": {
     "px_per_meter": <number>,
     "detected_scale": "<string like '1:100'>",
@@ -117,6 +125,28 @@ function buildAnalysisPrompt(imageWidth: number, imageHeight: number, floorHeigh
       "confidence": <0-1>
     }
   ],
+  "columns": [
+    {
+      "id": "column_<index>",
+      "shape": "<'square'|'rectangular'|'circular'>",
+      "center": [<x>, <y>],
+      "width_px": <number>,
+      "height_px": <number>,
+      "confidence": <0-1>
+    }
+  ],
+  "staircases": [
+    {
+      "id": "staircase_<index>",
+      "stair_type": "<'straight'|'dog_leg'|'spiral'|'l_shaped'>",
+      "start_px": [<x>, <y>],
+      "end_px": [<x>, <y>],
+      "direction": "<'up'|'down'|'unknown'>",
+      "num_flights": <number>,
+      "landing_detected": <boolean>,
+      "confidence": <0-1>
+    }
+  ],
   "floor_height_hint_m": ${floorHeightHint},
   "wall_thickness_hint_m": ${wallThicknessHint},
   "summary": {
@@ -134,14 +164,11 @@ function buildAnalysisPrompt(imageWidth: number, imageHeight: number, floorHeigh
 
 IMPORTANT INSTRUCTIONS:
 - Extract EVERY visible room, even unlabeled ones.
-- For polygons: trace the INNER boundary of each room (inside the wall edges). Include at least 4 vertices per room, more for non-rectangular rooms.
-- For walls: detect EVERY wall line. External walls are typically thicker.
-- Doors in floor plans appear as: an arc (quarter circle) + a line representing the door panel. The arc shows the swing direction.
-- Windows appear as: parallel lines or a gap in the wall with cross-hatching.
-- Scale bars appear as a labeled line at the bottom or side of the drawing.
+- For columns: detect structural pillars (often solid black or hatched rectangular boxes at wall intersections).
+- For staircases: trace the start/end points, flight directions, and landings.
+- For polygons: trace the INNER boundary of each room (inside the wall edges). Include at least 4 vertices per room.
 - If you cannot determine the scale, estimate based on typical room sizes: a bedroom is 10-15 m², a bathroom 4-6 m².
-- Read ALL text. Room labels like "BED ROOM", "KITCHEN", "W.C.", "BATH" should be used for classification.
-- Confidence scoring: OCR label match → high (0.90+). Size+adjacency match only → medium (0.70-0.89). Uncertain → flag (< 0.70).`
+- Convert any text dimensions (e.g., 12'-6" or 3800mm) into readable values in the OCR section.`
 }
 
 // ── Gemini API Call ─────────────────────────────────────────────────────────
@@ -215,12 +242,15 @@ export async function callGeminiVision(
 // ── Parse Gemini Response → Typed Structures ────────────────────────────────
 
 export interface GeminiRawResult {
+  drawing_classification?: any
   scale?: any
   ocr_regions?: any[]
   rooms?: any[]
   walls?: any[]
   doors?: any[]
   windows?: any[]
+  columns?: any[]
+  staircases?: any[]
   summary?: any
 }
 
@@ -247,6 +277,60 @@ export function parseGeminiResponse(raw: string): GeminiRawResult {
   }
 }
 
+// ── Unit / Dimension OCR Text Parser ────────────────────────────────────────
+
+export function parseDimensionTextToMeters(text: string): number {
+  const clean = text.toLowerCase().trim()
+  
+  // Handles millimeter inputs like "3810mm", "3810 mm"
+  if (clean.endsWith('mm')) {
+    const val = parseFloat(clean.replace('mm', ''))
+    return isNaN(val) ? 0 : val / 1000
+  }
+  // Handles centimeter inputs like "381cm", "381 cm"
+  if (clean.endsWith('cm')) {
+    const val = parseFloat(clean.replace('cm', ''))
+    return isNaN(val) ? 0 : val / 100
+  }
+  // Handles meter inputs like "3.81m", "3.81 m"
+  if (clean.endsWith('m') && !clean.endsWith('mm')) {
+    const val = parseFloat(clean.replace('m', ''))
+    return isNaN(val) ? 0 : val
+  }
+  
+  // Handles imperial inputs like "12'-6\"", "12' 6\"", "12ft 6in", "12'"
+  const feetInchRegex = /(\d+)\s*['-]\s*(\d+)\s*"/
+  const match = clean.match(feetInchRegex)
+  if (match) {
+    const feet = parseInt(match[1], 10)
+    const inches = parseInt(match[2], 10)
+    return (feet * 12 + inches) * 0.0254
+  }
+  
+  const feetRegex = /(\d+)\s*('|ft)/
+  const feetMatch = clean.match(feetRegex)
+  if (feetMatch) {
+    const feet = parseInt(feetMatch[1], 10)
+    return feet * 0.3048
+  }
+  
+  const inchRegex = /(\d+)\s*("\s*|in)/
+  const inchMatch = clean.match(inchRegex)
+  if (inchMatch) {
+    const inches = parseInt(inchMatch[1], 10)
+    return inches * 0.0254
+  }
+  
+  // Raw numbers (heuristics)
+  const num = parseFloat(clean)
+  if (!isNaN(num)) {
+    if (num > 100) return num / 1000 // Treat numbers over 100 as millimeters
+    return num
+  }
+  
+  return 0
+}
+
 // ── Convert raw Gemini output → our typed FloorPlanAnalysisResult ─────────
 
 export function convertGeminiToAnalysisResult(
@@ -260,6 +344,15 @@ export function convertGeminiToAnalysisResult(
   projectId: string
 ): Omit<FloorPlanAnalysisResult, 'image_enhancement'> {
   const now = new Date().toISOString()
+
+  // ── Drawing Classification ──────────────────────────────────────────────────
+  const rawClassification = raw.drawing_classification || {}
+  const drawingClassification: DrawingClassification = {
+    drawing_type: (rawClassification.drawing_type || 'architectural') as DrawingType,
+    confidence: rawClassification.confidence ?? 0.95,
+    is_architectural_floor_plan: rawClassification.is_architectural_floor_plan ?? true,
+    warning_message: rawClassification.warning_message || undefined
+  }
 
   // ── Scale ──────────────────────────────────────────────────────────────────
   const rawScale = raw.scale || {}
@@ -425,6 +518,46 @@ export function convertGeminiToAnalysisResult(
     confidence: win.confidence ?? 0.8,
   } as AIWindow))
 
+  // ── Columns ────────────────────────────────────────────────────────────────
+  const rawColumns = raw.columns || []
+  const columns: AIColumn[] = rawColumns.map((c: any, idx: number) => {
+    const wPx = c.width_px || 30
+    const hPx = c.height_px || 30
+    return {
+      id: c.id || `column_${idx}`,
+      shape: c.shape || 'square',
+      center: c.center || [0, 0],
+      width_px: wPx,
+      height_px: hPx,
+      size_m: [Math.round((wPx / pxPerMeter) * 100) / 100, Math.round((hPx / pxPerMeter) * 100) / 100],
+      connected_beam_ids: c.connected_beam_ids || [],
+      confidence: c.confidence ?? 0.85
+    } as AIColumn
+  })
+
+  // ── Staircases ──────────────────────────────────────────────────────────────
+  const rawStaircases = raw.staircases || []
+  const staircases: AIStaircase[] = rawStaircases.map((s: any, idx: number) => ({
+    id: s.id || `staircase_${idx}`,
+    stair_type: s.stair_type || 'straight',
+    start_px: s.start_px || [0, 0],
+    end_px: s.end_px || [0, 0],
+    direction: s.direction || 'unknown',
+    num_flights: s.num_flights || 1,
+    landing_detected: s.landing_detected ?? false,
+    confidence: s.confidence ?? 0.8
+  } as AIStaircase))
+
+  // ── Relationships Initial Setup ──────────────────────────────────────────
+  const relationships: GeometryRelationships = {
+    room_wall_adjacency: {},
+    room_connectivity_graph: {},
+    door_connectivity_graph: {},
+    window_connectivity_graph: {},
+    building_boundary: [],
+    wall_centerlines: walls.map(w => ({ wall_id: w.id, start: w.start, end: w.end }))
+  }
+
   // ── Summary stats ──────────────────────────────────────────────────────────
   const totalAreaM2 = rooms.reduce((s, r) => s + r.area_m2, 0)
   const lowConfRooms = rooms.filter(r => r.classification.low_confidence_flag)
@@ -443,6 +576,9 @@ export function convertGeminiToAnalysisResult(
     walls,
     doors,
     windows,
+    columns,
+    staircases,
+    relationships,
     ocr_regions: ocrRegions,
     raw_ocr_texts: rawOcrTexts,
     total_area_m2: Math.round(totalAreaM2 * 10) / 10,
@@ -451,11 +587,14 @@ export function convertGeminiToAnalysisResult(
     door_count: doors.length,
     window_count: windows.length,
     wall_count: walls.length,
+    column_count: columns.length,
+    staircase_count: staircases.length,
     floor_height_m: floorHeightM,
     wall_thickness_m: wallThicknessM,
     overall_confidence: Math.round(overallConf * 100) / 100,
     low_confidence_room_ids: lowConfRooms.map(r => r.id),
     needs_user_review: lowConfRooms.length > 0,
+    drawing_classification: drawingClassification,
     geometry_validation: {
       is_valid: true,
       issues: [],

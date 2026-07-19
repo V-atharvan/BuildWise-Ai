@@ -4,9 +4,12 @@ import { useState, useRef, useMemo, useCallback } from 'react'
 import {
   ZoomIn, ZoomOut, Maximize2, Layers, Eye, EyeOff,
   Edit3, Trash2, Merge, Plus, Check, DoorOpen, Grid3x3,
-  ShieldCheck,
+  ShieldCheck, Columns, Footprints, Ruler
 } from 'lucide-react'
-import type { AIRoom as DetectedRoom, AIWall as DetectedWall, AIDoor, AIWindow } from '@/lib/floor-plan-ai/types'
+import type { 
+  AIRoom as DetectedRoom, AIWall as DetectedWall, AIDoor, AIWindow,
+  AIColumn, AIStaircase, GeometryRelationships
+} from '@/lib/floor-plan-ai/types'
 
 // Re-export types for consumers
 export type { DetectedRoom, DetectedWall }
@@ -28,6 +31,9 @@ interface FloorPlanViewerProps {
   walls?: DetectedWall[]
   doors?: AIDoor[]
   windows?: AIWindow[]
+  columns?: AIColumn[]
+  staircases?: AIStaircase[]
+  relationships?: GeometryRelationships
   flaggedRooms?: FlaggedRoom[]
   onRoomClick?: (room: DetectedRoom) => void
   onRoomRename?: (roomId: string, newLabel: string) => void
@@ -128,6 +134,7 @@ function WindowSymbol({ window: win }: { window: AIWindow }) {
 
 export function FloorPlanViewer({
   imageUrl, imageWidth, imageHeight, rooms, walls = [], doors = [], windows = [],
+  columns = [], staircases = [], relationships,
   flaggedRooms = [], onRoomClick, onRoomRename, onRoomDelete, onRoomMerge, selectedRoomId,
 }: FloorPlanViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -142,6 +149,9 @@ export function FloorPlanViewer({
   const [showConfidence, setShowConfidence] = useState(true)
   const [showDoors, setShowDoors] = useState(true)
   const [showWindows, setShowWindows] = useState(true)
+  const [showColumns, setShowColumns] = useState(true)
+  const [showStaircases, setShowStaircases] = useState(true)
+  const [showCenterlines, setShowCenterlines] = useState(false)
   const [confidenceMapMode, setConfidenceMapMode] = useState(false)
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null)
   const [editLabel, setEditLabel] = useState('')
@@ -197,7 +207,7 @@ export function FloorPlanViewer({
     <div className="relative rounded-2xl overflow-hidden border border-black/[0.06] dark:border-white/[0.06] bg-[#F8F8FA] dark:bg-[#18181C]">
 
       {/* ── Toolbar ── */}
-      <div className="absolute top-3 right-3 z-20 flex items-center gap-1 p-1 rounded-xl bg-white/90 dark:bg-[#1E1E24]/90 backdrop-blur-md border border-black/[0.06] dark:border-white/[0.06] shadow-lg flex-wrap max-w-[260px]">
+      <div className="absolute top-3 right-3 z-20 flex items-center gap-1 p-1 rounded-xl bg-white/90 dark:bg-[#1E1E24]/90 backdrop-blur-md border border-black/[0.06] dark:border-white/[0.06] shadow-lg flex-wrap max-w-[340px]">
         <button onClick={zoomIn} className="p-2 rounded-lg hover:bg-black/[0.05] dark:hover:bg-white/[0.05]" title="Zoom In"><ZoomIn className="w-3.5 h-3.5" /></button>
         <button onClick={zoomOut} className="p-2 rounded-lg hover:bg-black/[0.05] dark:hover:bg-white/[0.05]" title="Zoom Out"><ZoomOut className="w-3.5 h-3.5" /></button>
         <button onClick={resetView} className="p-2 rounded-lg hover:bg-black/[0.05] dark:hover:bg-white/[0.05]" title="Reset"><Maximize2 className="w-3.5 h-3.5" /></button>
@@ -208,6 +218,9 @@ export function FloorPlanViewer({
         <button onClick={() => setConfidenceMapMode(!confidenceMapMode)} className={`p-2 rounded-lg transition-all ${confidenceMapMode ? 'bg-amber-500/10 text-amber-500' : 'hover:bg-black/[0.05]'}`} title="Confidence Heat Map"><ShieldCheck className="w-3.5 h-3.5" /></button>
         <button onClick={() => setShowDoors(!showDoors)} className={`p-2 rounded-lg transition-all ${showDoors ? 'bg-gray-500/10 text-gray-600 dark:text-gray-400' : 'hover:bg-black/[0.05]'}`} title="Toggle Doors"><DoorOpen className="w-3.5 h-3.5" /></button>
         <button onClick={() => setShowWindows(!showWindows)} className={`p-2 rounded-lg transition-all ${showWindows ? 'bg-blue-500/10 text-blue-500' : 'hover:bg-black/[0.05]'}`} title="Toggle Windows"><Grid3x3 className="w-3.5 h-3.5" /></button>
+        <button onClick={() => setShowColumns(!showColumns)} className={`p-2 rounded-lg transition-all ${showColumns ? 'bg-slate-500/10 text-slate-700 dark:text-slate-400' : 'hover:bg-black/[0.05]'}`} title="Toggle Columns"><Columns className="w-3.5 h-3.5" /></button>
+        <button onClick={() => setShowStaircases(!showStaircases)} className={`p-2 rounded-lg transition-all ${showStaircases ? 'bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400' : 'hover:bg-black/[0.05]'}`} title="Toggle Staircases"><Footprints className="w-3.5 h-3.5" /></button>
+        <button onClick={() => setShowCenterlines(!showCenterlines)} className={`p-2 rounded-lg transition-all ${showCenterlines ? 'bg-red-500/10 text-red-500' : 'hover:bg-black/[0.05]'}`} title="Toggle Centerlines"><Ruler className="w-3.5 h-3.5" /></button>
         {onRoomMerge && (
           <>
             <div className="w-px h-4 bg-black/[0.08] dark:bg-white/[0.08]" />
@@ -377,6 +390,78 @@ export function FloorPlanViewer({
             {showWindows && windows.map(win => (
               <WindowSymbol key={win.id} window={win} />
             ))}
+
+            {/* Columns */}
+            {showColumns && columns && columns.map(col => (
+              col.shape === 'circular' ? (
+                <circle
+                  key={col.id}
+                  cx={col.center[0]}
+                  cy={col.center[1]}
+                  r={Math.max(col.width_px, col.height_px) / 2}
+                  fill="#111827"
+                  stroke="#4B5563"
+                  strokeWidth={1}
+                  opacity={0.85}
+                />
+              ) : (
+                <rect
+                  key={col.id}
+                  x={col.center[0] - col.width_px / 2}
+                  y={col.center[1] - col.height_px / 2}
+                  width={col.width_px}
+                  height={col.height_px}
+                  fill="#111827"
+                  stroke="#4B5563"
+                  strokeWidth={1}
+                  opacity={0.85}
+                />
+              )
+            ))}
+
+            {/* Staircases */}
+            {showStaircases && staircases && staircases.map(stair => {
+              const start = stair.start_px || [0,0]
+              const end = stair.end_px || [0,0]
+              return (
+                <g key={stair.id} opacity={0.8}>
+                  {/* Staircase border */}
+                  <line x1={start[0]} y1={start[1]} x2={end[0]} y2={end[1]} stroke="#A855F7" strokeWidth={3} />
+                  <line x1={start[0]} y1={start[1]} x2={end[0]} y2={end[1]} stroke="#C084FC" strokeWidth={1} strokeDasharray="3,3" />
+                  <circle cx={start[0]} cy={start[1]} r={4} fill="#A855F7" />
+                  <text x={(start[0] + end[0]) / 2} y={(start[1] + end[1]) / 2 - 8} textAnchor="middle" fontSize={8} fill="#A855F7" fontWeight="bold">
+                    STAIRS ({stair.direction?.toUpperCase()})
+                  </text>
+                </g>
+              )
+            })}
+
+            {/* Wall Centerlines */}
+            {showCenterlines && relationships?.wall_centerlines && relationships.wall_centerlines.map((line, idx) => (
+              <line
+                key={`centerline_${idx}`}
+                x1={line.start[0]}
+                y1={line.start[1]}
+                x2={line.end[0]}
+                y2={line.end[1]}
+                stroke="#A855F7"
+                strokeWidth={1.2}
+                strokeDasharray="4,3"
+                opacity={0.9}
+              />
+            ))}
+
+            {/* Building Boundary Envelope */}
+            {showCenterlines && relationships?.building_boundary && relationships.building_boundary.length > 0 && (
+              <polygon
+                points={polygonToSvgPoints(relationships.building_boundary)}
+                fill="none"
+                stroke="#EF4444"
+                strokeWidth={2}
+                strokeDasharray="6,4"
+                opacity={0.8}
+              />
+            )}
           </svg>
         </div>
 

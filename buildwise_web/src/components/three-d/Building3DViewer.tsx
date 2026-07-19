@@ -1,11 +1,11 @@
 'use client'
 
 import { useRef, useState, useMemo, useCallback, useEffect } from 'react'
-import { Canvas, useFrame, useThree, ThreeEvent } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Text, Grid, PerspectiveCamera, Html, Billboard } from '@react-three/drei'
 import * as THREE from 'three'
 import {
-  Eye, EyeOff, Box, Layers, RotateCcw, DoorOpen, AppWindow,
+  Eye, EyeOff, Box, RotateCcw, DoorOpen, AppWindow,
   Footprints,
 } from 'lucide-react'
 
@@ -41,6 +41,7 @@ interface Building3DViewerProps {
   rooms: Room3D[]
   doors?: Door3D[]
   windows?: Window3D[]
+  columns?: any[]
   floorHeight?: number
   scaleFactor?: number
   onRoomClick?: (roomId: string) => void
@@ -69,11 +70,11 @@ function getRoomColor(label: string): string {
 
 function RoomMesh({
   room, floorHeight, isSelected, isHovered, showWalls, showLabels,
-  selectedWallKey, wallThickness, onHover, onClick, onDoubleClick, onWallClick,
+  selectedWallKey, wallThickness, exploreMode, onHover, onClick, onDoubleClick, onWallClick,
 }: {
   room: Room3D; floorHeight: number; isSelected: boolean; isHovered: boolean
   showWalls: boolean; showLabels: boolean; selectedWallKey: string | null
-  wallThickness: number
+  wallThickness: number; exploreMode: 'normal' | 'wireframe' | 'transparent' | 'structural' | 'masonry'
   onHover: (h: boolean) => void; onClick: () => void; onDoubleClick: () => void
   onWallClick?: (roomId: string, wallIndex: number, length: number, thickness: number) => void
 }) {
@@ -100,7 +101,12 @@ function RoomMesh({
     })
   }, [poly])
 
-  const opacity = isSelected ? 0.55 : isHovered ? 0.45 : 0.28
+  const isWire = exploreMode === 'wireframe'
+  const isTrans = exploreMode === 'transparent'
+  const isStruct = exploreMode === 'structural'
+
+  const opacity = isTrans ? 0.08 : isSelected ? 0.55 : isHovered ? 0.45 : 0.28
+  const wallOpacity = isTrans ? 0.12 : isSelected ? 0.80 : 0.60
 
   return (
     <group>
@@ -112,17 +118,19 @@ function RoomMesh({
         onPointerLeave={() => onHover(false)}
       >
         <shapeGeometry args={[shape]} />
-        <meshStandardMaterial color={color} transparent opacity={opacity} side={THREE.DoubleSide} />
+        <meshStandardMaterial color={color} transparent opacity={opacity} side={THREE.DoubleSide} wireframe={isWire} />
       </mesh>
 
       {/* Ceiling */}
-      <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, floorHeight, 0]}>
-        <shapeGeometry args={[shape]} />
-        <meshStandardMaterial color="#FAFAFA" transparent opacity={0.04} side={THREE.DoubleSide} />
-      </mesh>
+      {!isStruct && (
+        <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, floorHeight, 0]}>
+          <shapeGeometry args={[shape]} />
+          <meshStandardMaterial color="#FAFAFA" transparent opacity={isTrans ? 0.02 : 0.04} side={THREE.DoubleSide} wireframe={isWire} />
+        </mesh>
+      )}
 
       {/* Walls */}
-      {showWalls && wallSegments.map((seg, i) => {
+      {showWalls && !isStruct && wallSegments.map((seg, i) => {
         const midX = (seg.start[0] + seg.end[0]) / 2
         const midY = (seg.start[1] + seg.end[1]) / 2
         const wallKey = `${room.id}-${i}`
@@ -138,7 +146,8 @@ function RoomMesh({
             <meshStandardMaterial
               color={isWallSelected ? '#A855F7' : isSelected ? '#C084FC' : '#E5E7EB'}
               transparent
-              opacity={isWallSelected ? 0.95 : isSelected ? 0.80 : 0.60}
+              opacity={isWallSelected ? 0.95 : wallOpacity}
+              wireframe={isWire}
             />
             {isWallSelected && (
               <Html position={[0, floorHeight * 0.65, 0]} center distanceFactor={8}>
@@ -183,20 +192,17 @@ function RoomMesh({
 function DoorMarker({ door, scaleFactor, floorHeight }: { door: Door3D; scaleFactor: number; floorHeight: number }) {
   const [cx, cz] = door.center
   const w = door.width_m
-  const h = Math.min(door.width_m * 2.33, floorHeight * 0.85)  // door height
+  const h = Math.min(door.width_m * 2.33, floorHeight * 0.85)
 
-  // Find min bounds of all rooms for centering
   const x = cx * scaleFactor
   const z = cz * scaleFactor
 
   return (
     <group position={[x, 0, z]}>
-      {/* Door opening indicator — thin colored plane */}
       <mesh position={[0, h / 2, 0]}>
         <boxGeometry args={[w, h, 0.02]} />
         <meshStandardMaterial color="#374151" transparent opacity={0.35} />
       </mesh>
-      {/* Door frame lines */}
       <lineSegments>
         <edgesGeometry args={[new THREE.BoxGeometry(w, h, 0.04)]} />
         <lineBasicMaterial color="#374151" />
@@ -226,6 +232,28 @@ function WindowMarker({ window: win, scaleFactor, floorHeight }: { window: Windo
   )
 }
 
+// ── Column marker ─────────────────────────────────────────────────────────────
+
+function ColumnMarker({ column, scaleFactor, floorHeight, centerOffset }: { column: any; scaleFactor: number; floorHeight: number; centerOffset: { x: number; y: number } }) {
+  const [cx, cz] = column.center || [0, 0]
+  const size = column.size_m || [0.23, 0.23]
+  const isCircular = column.shape === 'circular'
+  
+  const x = cx * scaleFactor - centerOffset.x
+  const z = cz * scaleFactor - centerOffset.y
+  
+  return (
+    <mesh position={[x, floorHeight / 2, z]}>
+      {isCircular ? (
+        <cylinderGeometry args={[size[0] / 2, size[0] / 2, floorHeight, 16]} />
+      ) : (
+        <boxGeometry args={[size[0], floorHeight, size[1] ?? size[0]]} />
+      )}
+      <meshStandardMaterial color="#4B5563" roughness={0.7} metalness={0.1} />
+    </mesh>
+  )
+}
+
 // ── Camera tweener ────────────────────────────────────────────────────────────
 
 function CameraTweener({ target, preset, walkthroughMode }: {
@@ -236,7 +264,6 @@ function CameraTweener({ target, preset, walkthroughMode }: {
 
   const lastTargetRef = useRef<THREE.Vector3 | null>(null)
 
-  // Trigger animation when target changes (compare coordinates, not object references)
   useEffect(() => {
     if (target) {
       const isSame = lastTargetRef.current && 
@@ -254,7 +281,6 @@ function CameraTweener({ target, preset, walkthroughMode }: {
     }
   }, [target])
 
-  // Manage presets directly
   useEffect(() => {
     if (!controls) return
     const ctrl = controls as any
@@ -273,11 +299,9 @@ function CameraTweener({ target, preset, walkthroughMode }: {
       const dist = walkthroughMode ? 3 : 7
       const destPos = new THREE.Vector3(currentTarget.x, currentTarget.y + height, currentTarget.z + dist)
 
-      // Calculate remaining distances
       const targetDist = ctrl.target.distanceTo(currentTarget)
       const camDist = camera.position.distanceTo(destPos)
 
-      // Once we are close enough to the target, stop fighting user's OrbitControls
       if (targetDist < 0.05 && camDist < 0.05) {
         setCurrentTarget(null)
         return
@@ -291,18 +315,19 @@ function CameraTweener({ target, preset, walkthroughMode }: {
   return null
 }
 
-// ── Main Scene ────────────────────────────────────────────────────────────────
+// ── Scene ─────────────────────────────────────────────────────────────────────
 
 function Scene({
-  rooms, doors, windows, floorHeight, scaleFactor, selectedRoomId, selectedWallKey,
+  rooms, doors, windows, columns = [], floorHeight, scaleFactor, selectedRoomId, selectedWallKey,
   showWalls, showLabels, showDoors, showWindows, cameraPreset, walkthroughMode,
-  wallThickness, onRoomClick, onWallClick,
+  wallThickness, exploreMode, onRoomClick, onWallClick,
 }: {
-  rooms: Room3D[]; doors: Door3D[]; windows: Window3D[]
+  rooms: Room3D[]; doors: Door3D[]; windows: Window3D[]; columns: any[]
   floorHeight: number; scaleFactor: number
   selectedRoomId: string | null; selectedWallKey: string | null
   showWalls: boolean; showLabels: boolean; showDoors: boolean; showWindows: boolean
   cameraPreset: string; walkthroughMode: boolean; wallThickness: number
+  exploreMode: 'normal' | 'wireframe' | 'transparent' | 'structural' | 'masonry'
   onRoomClick: (id: string) => void
   onWallClick?: (roomId: string, wallIndex: number, length: number, thickness: number) => void
 }) {
@@ -348,6 +373,9 @@ function Scene({
     if (room) handleDoubleClick(room)
   }, [selectedRoomId, transformedRooms])
 
+  const isMasonry = exploreMode === 'masonry'
+  const isStruct = exploreMode === 'structural'
+
   return (
     <>
       <ambientLight intensity={0.65} />
@@ -361,7 +389,7 @@ function Scene({
         <RoomMesh key={room.id} room={room} floorHeight={floorHeight}
           isSelected={selectedRoomId === room.id} isHovered={hoveredRoom === room.id}
           showWalls={showWalls} showLabels={showLabels} selectedWallKey={selectedWallKey}
-          wallThickness={wallThickness}
+          wallThickness={wallThickness} exploreMode={exploreMode}
           onHover={h => setHoveredRoom(h ? room.id : null)}
           onClick={() => onRoomClick(room.id)}
           onDoubleClick={() => handleDoubleClick(room)}
@@ -370,7 +398,7 @@ function Scene({
       ))}
 
       {/* Door markers */}
-      {showDoors && doors.map(door => (
+      {showDoors && !isStruct && doors.map(door => (
         <DoorMarker key={door.id} door={{
           ...door,
           center: [door.center[0] * scaleFactor - centerOffset.x, door.center[1] * scaleFactor - centerOffset.y],
@@ -378,11 +406,16 @@ function Scene({
       ))}
 
       {/* Window markers */}
-      {showWindows && windows.map(win => (
+      {showWindows && !isStruct && windows.map(win => (
         <WindowMarker key={win.id} window={{
           ...win,
           center: [win.center[0] * scaleFactor - centerOffset.x, win.center[1] * scaleFactor - centerOffset.y],
         }} scaleFactor={1} floorHeight={floorHeight} />
+      ))}
+
+      {/* Column structural markers */}
+      {!isMasonry && columns.map((col, idx) => (
+        <ColumnMarker key={col.id || idx} column={col} scaleFactor={scaleFactor} floorHeight={floorHeight} centerOffset={centerOffset} />
       ))}
 
       <CameraTweener target={cameraTarget} preset={cameraPreset} walkthroughMode={walkthroughMode} />
@@ -394,7 +427,7 @@ function Scene({
 // ── Main Export ───────────────────────────────────────────────────────────────
 
 export function Building3DViewer({
-  rooms, doors = [], windows = [], floorHeight = 3.0, scaleFactor = 0.015,
+  rooms, doors = [], windows = [], columns = [], floorHeight = 3.0, scaleFactor = 0.015,
   onRoomClick, onWallClick, selectedRoomId = null, selectedWallKey = null,
 }: Building3DViewerProps) {
   const [showLabels, setShowLabels] = useState(true)
@@ -403,6 +436,10 @@ export function Building3DViewer({
   const [showWindows, setShowWindows] = useState(true)
   const [walkthroughMode, setWalkthroughMode] = useState(false)
   const [cameraPreset, setCameraPreset] = useState<'perspective'|'top'|'front'|'side'|'walkthrough'>('perspective')
+  
+  // Explore Mode state (Section 10)
+  const [exploreMode, setExploreMode] = useState<'normal' | 'wireframe' | 'transparent' | 'structural' | 'masonry'>('normal')
+  
   const wallThickness = 0.23
 
   const handleRoomClick = useCallback((id: string) => onRoomClick?.(id), [onRoomClick])
@@ -420,24 +457,42 @@ export function Building3DViewer({
   return (
     <div className="relative rounded-2xl overflow-hidden border border-black/[0.06] dark:border-white/[0.06] bg-[#0A0A0F]">
       {/* Toolbar */}
-      <div className="absolute top-3 right-3 z-20 flex items-center gap-1 p-1 rounded-xl bg-[#1E1E24]/90 backdrop-blur-md border border-white/[0.06] shadow-lg">
-        <div className="flex border-r border-white/[0.08] pr-1.5 mr-0.5 gap-0.5">
+      <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 p-1 rounded-xl bg-[#1E1E24]/90 backdrop-blur-md border border-white/[0.06] shadow-lg flex-wrap max-w-md">
+        
+        {/* Explore Mode Selection (Section 10) */}
+        <select 
+          value={exploreMode}
+          onChange={(e) => setExploreMode(e.target.value as any)}
+          className="bg-transparent text-[10px] text-violet-400 font-bold border border-white/10 rounded-lg px-2 py-1 outline-none cursor-pointer focus:border-violet-500"
+        >
+          <option value="normal" className="bg-[#1E1E24]">Normal Mode</option>
+          <option value="wireframe" className="bg-[#1E1E24]">Wireframe View</option>
+          <option value="transparent" className="bg-[#1E1E24]">Transparent View</option>
+          <option value="structural" className="bg-[#1E1E24]">Structural View</option>
+          <option value="masonry" className="bg-[#1E1E24]">Masonry View</option>
+        </select>
+
+        <div className="w-px h-4 bg-white/[0.08]" />
+
+        <div className="flex border-r border-white/[0.08] pr-1.5 gap-0.5">
           {(['perspective','top','front','side'] as const).map(preset => (
             <button key={preset} onClick={() => { setCameraPreset(preset); setWalkthroughMode(false) }}
-              className={`px-2 py-2 rounded-lg text-[10px] font-bold transition-all ${cameraPreset === preset && !walkthroughMode ? 'bg-violet-500/20 text-violet-400' : 'text-white/40 hover:bg-white/[0.05]'}`}>
+              className={`px-2 py-1 rounded-lg text-[9px] font-bold transition-all ${cameraPreset === preset && !walkthroughMode ? 'bg-violet-500/20 text-violet-400' : 'text-white/40 hover:bg-white/[0.05]'}`}>
               {preset.toUpperCase().slice(0, 4)}
             </button>
           ))}
         </div>
+        
         <button onClick={() => { setWalkthroughMode(!walkthroughMode); setCameraPreset('walkthrough') }}
-          className={`p-2 rounded-lg transition-all ${walkthroughMode ? 'bg-emerald-500/20 text-emerald-400' : 'text-white/40 hover:bg-white/[0.05]'}`} title="Walkthrough Mode">
+          className={`p-1.5 rounded-lg transition-all ${walkthroughMode ? 'bg-emerald-500/20 text-emerald-400' : 'text-white/40 hover:bg-white/[0.05]'}`} title="Walkthrough Mode">
           <Footprints className="w-4 h-4" />
         </button>
+        
         <div className="w-px h-4 bg-white/[0.08] mx-0.5" />
-        <button onClick={() => setShowWalls(!showWalls)} className={`p-2 rounded-lg transition-all ${showWalls ? 'bg-violet-500/20 text-violet-400' : 'text-white/40 hover:bg-white/[0.05]'}`} title="Toggle Walls"><Box className="w-4 h-4" /></button>
-        <button onClick={() => setShowLabels(!showLabels)} className={`p-2 rounded-lg transition-all ${showLabels ? 'bg-violet-500/20 text-violet-400' : 'text-white/40 hover:bg-white/[0.05]'}`} title="Toggle Labels">{showLabels ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}</button>
-        <button onClick={() => setShowDoors(!showDoors)} className={`p-2 rounded-lg transition-all ${showDoors ? 'bg-gray-400/20 text-gray-300' : 'text-white/40 hover:bg-white/[0.05]'}`} title="Toggle Doors"><DoorOpen className="w-4 h-4" /></button>
-        <button onClick={() => setShowWindows(!showWindows)} className={`p-2 rounded-lg transition-all ${showWindows ? 'bg-blue-500/20 text-blue-400' : 'text-white/40 hover:bg-white/[0.05]'}`} title="Toggle Windows"><AppWindow className="w-4 h-4" /></button>
+        <button onClick={() => setShowWalls(!showWalls)} className={`p-1.5 rounded-lg transition-all ${showWalls ? 'bg-violet-500/20 text-violet-400' : 'text-white/40 hover:bg-white/[0.05]'}`} title="Toggle Walls"><Box className="w-4 h-4" /></button>
+        <button onClick={() => setShowLabels(!showLabels)} className={`p-1.5 rounded-lg transition-all ${showLabels ? 'bg-violet-500/20 text-violet-400' : 'text-white/40 hover:bg-white/[0.05]'}`} title="Toggle Labels">{showLabels ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}</button>
+        <button onClick={() => setShowDoors(!showDoors)} className={`p-1.5 rounded-lg transition-all ${showDoors ? 'bg-gray-400/20 text-gray-300' : 'text-white/40 hover:bg-white/[0.05]'}`} title="Toggle Doors"><DoorOpen className="w-4 h-4" /></button>
+        <button onClick={() => setShowWindows(!showWindows)} className={`p-1.5 rounded-lg transition-all ${showWindows ? 'bg-blue-500/20 text-blue-400' : 'text-white/40 hover:bg-white/[0.05]'}`} title="Toggle Windows"><AppWindow className="w-4 h-4" /></button>
       </div>
 
       {/* Room legend */}
@@ -466,13 +521,13 @@ export function Building3DViewer({
         <Canvas shadows dpr={[1, 2]} gl={{ preserveDrawingBuffer: true }}>
           <PerspectiveCamera makeDefault position={[14, 11, 14]} fov={50} />
           <Scene
-            rooms={rooms} doors={doors} windows={windows}
+            rooms={rooms} doors={doors} windows={windows} columns={columns}
             floorHeight={floorHeight} scaleFactor={scaleFactor}
             selectedRoomId={selectedRoomId} selectedWallKey={selectedWallKey}
             showWalls={showWalls} showLabels={showLabels}
             showDoors={showDoors} showWindows={showWindows}
             cameraPreset={cameraPreset} walkthroughMode={walkthroughMode}
-            wallThickness={wallThickness}
+            wallThickness={wallThickness} exploreMode={exploreMode}
             onRoomClick={handleRoomClick}
             onWallClick={(roomId, wallIdx, len, thick) => onWallClick?.({ roomId, wallIndex: wallIdx, length: len, thickness: thick })}
           />

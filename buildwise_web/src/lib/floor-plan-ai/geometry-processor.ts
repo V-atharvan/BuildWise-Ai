@@ -6,6 +6,7 @@
 import type {
   FloorPlanAnalysisResult, AIRoom, AIWall, AIDoor, AIWindow,
   GeometryValidation, GeometryIssue, PixelPoint,
+  AIColumn, AIStaircase, GeometryRelationships
 } from './types'
 
 const GAP_THRESHOLD_PX = 8   // Max gap to auto-close between wall endpoints
@@ -171,6 +172,38 @@ function associateDoorsWithWalls(doors: AIDoor[], walls: AIWall[], issues: Geome
 
 // ── Main Geometry Validation ────────────────────────────────────────────────
 
+// Helper to calculate distance from a point to a line segment
+function distanceToSegment(pt: PixelPoint, start: PixelPoint, end: PixelPoint): number {
+  const [cx, cy] = pt
+  const dx = end[0] - start[0]
+  const dy = end[1] - start[1]
+  const lenSq = dx * dx + dy * dy
+  let t = lenSq > 0 ? ((cx - start[0]) * dx + (cy - start[1]) * dy) / lenSq : 0
+  t = Math.max(0, Math.min(1, t))
+  const px = start[0] + t * dx
+  const py = start[1] + t * dy
+  return Math.sqrt((cx - px) ** 2 + (cy - py) ** 2)
+}
+
+function getWallAdjacentToRoom(wall: AIWall, room: AIRoom, threshold: number = 30): boolean {
+  for (let i = 0; i < room.polygon.length; i++) {
+    const p1 = room.polygon[i]
+    const p2 = room.polygon[(i + 1) % room.polygon.length]
+    
+    // Distance from wall midpoint to room segment
+    const midPoint: PixelPoint = [(wall.start[0] + wall.end[0]) / 2, (wall.start[1] + wall.end[1]) / 2]
+    const distMid = distanceToSegment(midPoint, p1, p2)
+    if (distMid < threshold) return true
+    
+    const distStart = distanceToSegment(wall.start, p1, p2)
+    const distEnd = distanceToSegment(wall.end, p1, p2)
+    if (distStart < threshold || distEnd < threshold) return true
+  }
+  return false
+}
+
+// ── Main Geometry Validation ────────────────────────────────────────────────
+
 export function validateAndCorrectGeometry(
   result: Omit<FloorPlanAnalysisResult, 'image_enhancement' | 'geometry_validation'>
 ): GeometryValidation {
@@ -216,16 +249,143 @@ export function validateAndCorrectGeometry(
   }
 
   // 3. Validate walls
-  validateWalls(result.walls, issues)
+  const validatedWalls = validateWalls(result.walls, issues)
+  result.walls = validatedWalls
 
   // 4. Associate orphan doors/windows with walls
-  associateDoorsWithWalls(result.doors, result.walls, issues)
+  result.doors = associateDoorsWithWalls(result.doors, validatedWalls, issues)
+  
+  // Windows association
+  result.windows = result.windows.map(win => {
+    if (win.wall_id) return win
+    let nearestWallId: string | null = null
+    let minDist = Infinity
+    for (const wall of validatedWalls) {
+      const dist = distanceToSegment(win.center, wall.start, wall.end)
+      if (dist < minDist) {
+        minDist = dist
+        nearestWallId = wall.id
+      }
+    }
+    if (nearestWallId && minDist < 50) {
+      return { ...win, wall_id: nearestWallId }
+    }
+    if (minDist >= 50) {
+      issues.push({
+        type: 'orphan_window',
+        element_ids: [win.id],
+        severity: 'warning',
+        description: `Window ${win.id} could not be associated with any wall (nearest: ${minDist.toFixed(1)}px away)`,
+        auto_corrected: false
+      })
+    }
+    return win
+  })
+
+  // 5. Validate Columns
+  const cols = result.columns || []
+  for (const col of cols) {
+    let colInWall = false
+    for (const wall of validatedWalls) {
+      const dist = distanceToSegment(col.center, wall.start, wall.end)
+      if (dist < (wall.thickness_px / 2 + Math.max(col.width_px, col.height_px))) {
+        colInWall = true
+        break
+      }
+    }
+    if (!colInWall && validatedWalls.length > 0) {
+      issues.push({
+        type: 'column_outside_wall',
+        severity: 'warning',
+        element_ids: [col.id],
+        description: `Column ${col.id} is placed outside of any detected wall`,
+        auto_corrected: false
+      })
+    }
+  }
+
+  // 6. Build Geometrical Relationships
+  const room_wall_adjacency: Record<string, string[]> = {}
+  const room_connectivity_graph: Record<string, string[]> = {}
+  const door_connectivity_graph: Record<string, { door_id: string; room_a: string; room_b: string | null }> = {}
+  const window_connectivity_graph: Record<string, { window_id: string; room_id: string }> = {}
+
+  // Room Wall Adjacency
+  validatedRooms.forEach(room => {
+    room_wall_adjacency[room.id] = []
+    validatedWalls.forEach(wall => {
+      if (getWallAdjacentToRoom(wall, room)) {
+        room_wall_adjacency[room.id].push(wall.id)
+        if (!wall.room_ids.includes(room.id)) {
+          wall.room_ids.push(room.id)
+        }
+        if (!room.wall_ids.includes(wall.id)) {
+          room.wall_ids.push(wall.id)
+        }
+      }
+    })
+  })
+
+  // Door Connectivity Graph
+  result.doors.forEach(door => {
+    door_connectivity_graph[door.id] = {
+      door_id: door.id,
+      room_a: door.room_id || '',
+      room_b: door.adjacent_room_id || null
+    }
+
+    if (door.room_id) {
+      if (!room_connectivity_graph[door.room_id]) room_connectivity_graph[door.room_id] = []
+      if (door.adjacent_room_id) {
+        if (!room_connectivity_graph[door.room_id].includes(door.adjacent_room_id)) {
+          room_connectivity_graph[door.room_id].push(door.adjacent_room_id)
+        }
+        if (!room_connectivity_graph[door.adjacent_room_id]) room_connectivity_graph[door.adjacent_room_id] = []
+        if (!room_connectivity_graph[door.adjacent_room_id].includes(door.room_id)) {
+          room_connectivity_graph[door.adjacent_room_id].push(door.room_id)
+        }
+      }
+    }
+  })
+
+  // Window Connectivity Graph
+  result.windows.forEach(win => {
+    if (win.room_id) {
+      window_connectivity_graph[win.id] = {
+        window_id: win.id,
+        room_id: win.room_id
+      }
+    }
+  })
+
+  // Building boundary calculation
+  const building_boundary: PixelPoint[] = []
+  if (validatedRooms.length > 0) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    validatedRooms.forEach(r => r.polygon.forEach(([x, y]) => {
+      if (x < minX) minX = x
+      if (y < minY) minY = y
+      if (x > maxX) maxX = x
+      if (y > maxY) maxY = y
+    }))
+    building_boundary.push([minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY])
+  }
+
+  // Write computed relationships
+  result.relationships = {
+    room_wall_adjacency,
+    room_connectivity_graph,
+    door_connectivity_graph,
+    window_connectivity_graph,
+    building_boundary,
+    wall_centerlines: validatedWalls.map(w => ({ wall_id: w.id, start: w.start, end: w.end }))
+  }
 
   return {
     is_valid: issues.filter(i => i.severity === 'error').length === 0,
     issues,
     rooms_validated: validatedRooms.length,
-    walls_validated: result.walls.length,
+    walls_validated: validatedWalls.length,
     auto_corrections_applied: autoCorrections,
   }
 }

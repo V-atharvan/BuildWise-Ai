@@ -3,10 +3,123 @@
 // Step 1: Image Enhancement (Browser Canvas API)
 // ══════════════════════════════════════════════════════════════════════════════
 
-import type { ImageEnhancementResult } from './types'
+import type { ImageEnhancementResult, ImageQualityResult } from './types'
 
 const MAX_DIMENSION = 2048    // Max px for Gemini API
 const MAX_FILE_SIZE_B = 4_000_000  // 4 MB limit for inline base64
+
+// ── Image Quality Analysis ──────────────────────────────────────────────────
+
+export function analyzeImageQuality(
+  pixels: Uint8ClampedArray,
+  width: number,
+  height: number
+): ImageQualityResult {
+  let totalLum = 0
+  let minLum = 255
+  let maxLum = 0
+  
+  // Sample every 4th pixel for speed
+  const step = 4 * 4 // 4 components per pixel, sample every 4th pixel
+  let sampleCount = 0
+  
+  for (let i = 0; i < pixels.length; i += step) {
+    const r = pixels[i]
+    const g = pixels[i + 1]
+    const b = pixels[i + 2]
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b
+    totalLum += lum
+    if (lum < minLum) minLum = lum
+    if (lum > maxLum) maxLum = lum
+    sampleCount++
+  }
+  
+  const avgBrightness = sampleCount > 0 ? totalLum / sampleCount : 127
+  const avgContrast = maxLum - minLum
+  
+  // Calculate blur index: average difference between adjacent pixels
+  let edgeDiffSum = 0
+  let diffCount = 0
+  const rowBytes = width * 4
+  
+  // Sample a grid of pixels
+  for (let y = 4; y < height - 4; y += 8) {
+    for (let x = 4; x < width - 4; x += 8) {
+      const idx = (y * width + x) * 4
+      if (idx + 4 >= pixels.length || idx + rowBytes >= pixels.length) continue
+      
+      const currentLum = 0.299 * pixels[idx] + 0.587 * pixels[idx + 1] + 0.114 * pixels[idx + 2]
+      
+      const rightIdx = idx + 4
+      const rightLum = 0.299 * pixels[rightIdx] + 0.587 * pixels[rightIdx + 1] + 0.114 * pixels[rightIdx + 2]
+      
+      const downIdx = idx + rowBytes
+      const downLum = 0.299 * pixels[downIdx] + 0.587 * pixels[downIdx + 1] + 0.114 * pixels[downIdx + 2]
+      
+      edgeDiffSum += Math.abs(currentLum - rightLum) + Math.abs(currentLum - downLum)
+      diffCount += 2
+    }
+  }
+  
+  const blurIndex = diffCount > 0 ? edgeDiffSum / diffCount : 10
+  
+  // Image Quality Scoring Rules
+  let score = 100
+  const problems: string[] = []
+  const recommendations: string[] = []
+  
+  const isLowRes = width < 1200 || height < 900
+  if (isLowRes) {
+    score -= 25
+    problems.push('Low Resolution')
+    recommendations.push('Upload a higher resolution drawing (min 1500px wide) for accurate text OCR.')
+  }
+  
+  const isDim = avgBrightness < 80
+  const isTooBright = avgBrightness > 220
+  if (isDim) {
+    score -= 10
+    problems.push('Low Brightness (Dim Image)')
+    recommendations.push('Improve lighting or brighten the plan so fine wall lines are clear.')
+  } else if (isTooBright) {
+    score -= 10
+    problems.push('Overexposed Image')
+    recommendations.push('Reduce glare or use a scanned version of the blueprint.')
+  }
+  
+  const isLowContrast = avgContrast < 120
+  if (isLowContrast) {
+    score -= 15
+    problems.push('Poor Contrast')
+    recommendations.push('Apply contrast enhancement or use a binary black-and-white scan.')
+  }
+  
+  const isBlurry = blurIndex < 6
+  if (isBlurry) {
+    score -= 20
+    problems.push('Blurry Details')
+    recommendations.push('Ensure the drawing is sharp and lines are not fuzzy.')
+  }
+  
+  // Cap score
+  score = Math.max(10, Math.min(100, score))
+  
+  if (score < 80) {
+    recommendations.push('Enhance image quality or re-scan before starting structural estimation.')
+  } else {
+    recommendations.push('Image quality is optimal. Ready for AI processing.')
+  }
+  
+  return {
+    score,
+    problems,
+    recommendations,
+    brightness: Math.round(avgBrightness),
+    contrast: Math.round(avgContrast),
+    blur_index: Math.round(blurIndex * 10) / 10,
+    is_skewed: false, // Default skew detection
+  }
+}
 
 // ── Convolution kernel helpers ──────────────────────────────────────────────
 
@@ -89,10 +202,6 @@ function estimateDominantAngle(
   width: number,
   height: number
 ): number {
-  // Sample rows and check for long horizontal runs of dark pixels
-  // For architectural drawings, lines should be at 0° or 90°
-  // We detect if image appears significantly rotated by checking aspect
-  // In practice, Gemini handles slight rotation well — we skip heavy Hough here
   return 0
 }
 
@@ -141,7 +250,6 @@ function resizeCanvas(
 
 async function pdfToCanvas(file: File): Promise<{ canvas: HTMLCanvasElement; width: number; height: number }> {
   try {
-    // Dynamically load pdfjs-dist if available
     const pdfjsLib = await import('pdfjs-dist' as any).catch(() => null)
     if (!pdfjsLib) {
       throw new Error('PDF.js not available. Please install pdfjs-dist.')
@@ -199,6 +307,9 @@ export async function enhanceFloorPlanImage(file: File): Promise<ImageEnhancemen
   const w = resizedCanvas.width
   const h = resizedCanvas.height
 
+  // Analyze quality on the raw/resized pixels
+  const quality = analyzeImageQuality(pixels, w, h)
+
   // Step 3: Noise reduction (Gaussian blur to remove scan artifacts)
   const isLowRes = w < 800 || h < 600
   if (isLowRes) {
@@ -236,12 +347,12 @@ export async function enhanceFloorPlanImage(file: File): Promise<ImageEnhancemen
 
   if (sizeBytes > MAX_FILE_SIZE_B) {
     // Re-export as JPEG at progressive quality to stay under limit
-    let quality = 0.92
+    let qualityVal = 0.92
     do {
-      dataUrl = resizedCanvas.toDataURL('image/jpeg', quality)
-      quality -= 0.05
-    } while (((dataUrl.length * 3) / 4) > MAX_FILE_SIZE_B && quality > 0.40)
-    enhancements.push(`Compressed to JPEG (quality: ${Math.round(quality * 100 + 5)}%)`)
+      dataUrl = resizedCanvas.toDataURL('image/jpeg', qualityVal)
+      qualityVal -= 0.05
+    } while (((dataUrl.length * 3) / 4) > MAX_FILE_SIZE_B && qualityVal > 0.40)
+    enhancements.push(`Compressed to JPEG (quality: ${Math.round(qualityVal * 100 + 5)}%)`)
   }
 
   return {
@@ -252,6 +363,7 @@ export async function enhanceFloorPlanImage(file: File): Promise<ImageEnhancemen
     enhanced_height: h,
     rotation_applied_deg: 0,
     enhancements_applied: enhancements,
+    image_quality: quality,
   }
 }
 

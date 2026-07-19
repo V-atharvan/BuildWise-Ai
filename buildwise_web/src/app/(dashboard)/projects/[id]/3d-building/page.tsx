@@ -13,20 +13,36 @@ export default function Project3DBuildingTab() {
   const [rooms, setRooms] = useState<any[]>([])
   const [doors, setDoors] = useState<any[]>([])
   const [windows, setWindows] = useState<any[]>([])
+  const [columns, setColumns] = useState<any[]>([])
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null)
   const [selectedWall, setSelectedWall] = useState<{ roomId: string; wallIndex: number; length: number; thickness: number } | null>(null)
   const [floorHeight, setFloorHeight] = useState(3.0)
   const [wallThickness, setWallThickness] = useState(0.23)
   const [isLoading, setIsLoading] = useState(false)
   const [materialConfig, setMaterialConfig] = useState<any>(null)
+  const [estimation, setEstimation] = useState<any>(null)
 
-  // Load plan and material config
+  // Load plan, material config, and latest estimation
   useEffect(() => {
     if (!projectId) return
 
     setIsLoading(true)
     const config = loadMaterialConfig(projectId)
     setMaterialConfig(config)
+
+    // Load latest estimation run
+    try {
+      const keys = Object.keys(localStorage)
+      const estKey = keys.find(k => 
+        k.startsWith('bw_demo_est_') && 
+        JSON.parse(localStorage.getItem(k) || '{}').project_id === projectId
+      )
+      if (estKey) {
+        setEstimation(JSON.parse(localStorage.getItem(estKey) || '{}'))
+      }
+    } catch (e) {
+      console.error(e)
+    }
 
     const planData = Object.keys(localStorage)
       .filter(k => k.startsWith('bw_demo_plan_'))
@@ -43,6 +59,7 @@ export default function Project3DBuildingTab() {
       setRooms(planData.detected_data.rooms)
       setDoors(planData.detected_data.doors || [])
       setWindows(planData.detected_data.windows || [])
+      setColumns(planData.detected_data.columns || [])
       setFloorHeight(planData.detected_data.floor_height_m || 3.0)
       setWallThickness(planData.detected_data.wall_thickness_m || 0.23)
       if (planData.detected_data.rooms.length > 0) {
@@ -172,61 +189,94 @@ export default function Project3DBuildingTab() {
     }
   }
 
-  // Room Calculations
+  // Room Calculations derived from estimation-engine
   const roomCalculations = (() => {
-    if (!selectedRoom || !materialConfig) return null
+    if (!selectedRoom) return null
+
+    const roomTakeoff = estimation?.room_takeoffs?.find((r: any) => r.room_id === selectedRoomId)
 
     const area = selectedRoom.area_m2
     const perimeter = selectedRoom.perimeter_m || (Math.sqrt(area) * 4)
     const wallArea = perimeter * floorHeight
     const wallVolume = wallArea * wallThickness
 
-    const brickCount = Math.round(wallVolume * 500)
-    const brickCost = brickCount * 9.5
-    const plasterArea = wallArea * 2
-    const plasterCost = plasterArea * 240
-    const isWashroomOrBalcony = selectedRoom.label.toLowerCase().includes('bath') || selectedRoom.label.toLowerCase().includes('toilet') || selectedRoom.label.toLowerCase().includes('balcony')
-    const tileRate = isWashroomOrBalcony ? 550 : 750
-    const tileCost = area * tileRate
-    const paintCost = wallArea * 120
+    const brickCount = roomTakeoff?.bricks_count ?? Math.round(wallVolume * 500)
+    const plasterArea = roomTakeoff?.plaster_m2 ?? (wallArea * 2)
+    const cementBags = roomTakeoff?.cement_bags ?? Math.round(wallVolume * 0.30 * 2.5)
+    const sandVol = roomTakeoff?.sand_volume_m3 ?? (wallVolume * 0.22)
 
-    const totalMaterialCost = brickCost + plasterCost + tileCost + paintCost
+    const rateBrick = estimation?.user_inputs?.rate_brick ?? 10
+    const rateCement = estimation?.user_inputs?.rate_cement ?? 430
+    const rateSand = estimation?.user_inputs?.rate_sand ?? 1400
+    const rateTiles = estimation?.user_inputs?.rate_tiles ?? 650
+    const ratePlaster = estimation?.user_inputs?.rate_plaster ?? 280
+    const ratePaint = estimation?.user_inputs?.rate_paint ?? 120
+
+    const brickCost = brickCount * rateBrick
+    const cementCost = cementBags * rateCement
+    const sandCost = sandVol * rateSand
+    const tileCost = area * rateTiles
+    const plasterCost = plasterArea * ratePlaster
+    const paintCost = (wallArea * 1.20) * ratePaint
+
+    const totalMaterialCost = brickCost + cementCost + sandCost + tileCost + plasterCost + paintCost
     const gstCost = totalMaterialCost * 0.18
     const contractorCost = totalMaterialCost * 0.10
     const grandTotal = totalMaterialCost + gstCost + contractorCost
 
     return {
       brickCount,
+      plasterArea,
+      cementBags,
+      sandVol,
       brickCost,
-      plasterCost,
+      cementCost,
+      sandCost,
       tileCost,
+      plasterCost,
       paintCost,
       subtotal: totalMaterialCost,
       gstCost,
       contractorCost,
-      grandTotal
+      grandTotal: roomTakeoff?.total_cost ?? grandTotal
     }
   })()
 
-  // Selected Wall Calculations
+  // Selected Wall Calculations derived from estimation-engine
   const wallCalculations = (() => {
     if (!selectedWall) return null
     const len = selectedWall.length
     const thick = selectedWall.thickness
     const area = len * floorHeight
     const vol = area * thick
-    const bricks = Math.round(vol * 500)
-    const brickCost = bricks * 9.5
-    const plasterCost = area * 2 * 240 // both sides
-    const cementBags = Math.round(vol * 0.30 * 2.5) // approx cement bags for mortar
-    const segmentCost = brickCost + plasterCost
+
+    const rateBrick = estimation?.user_inputs?.rate_brick ?? 10
+    const rateCement = estimation?.user_inputs?.rate_cement ?? 430
+    const rateSand = estimation?.user_inputs?.rate_sand ?? 1400
+    const ratePlaster = estimation?.user_inputs?.rate_plaster ?? 280
+
+    const isAAC = estimation?.user_inputs?.brick_type === 'aac_block'
+    const blockVg = 0.603 * 0.203 * 0.203
+    const bricks = isAAC ? Math.ceil(vol / blockVg) : Math.round(vol * 500)
+    const cementBags = isAAC ? 0 : Math.round(vol * 0.22 * 1.33 / 0.0347)
+    const sandVol = isAAC ? 0 : vol * 0.22 * 1.33
+
+    const brickCost = bricks * rateBrick
+    const cementCost = cementBags * rateCement
+    const sandCost = sandVol * rateSand
+    const plasterCost = area * 2 * ratePlaster
+
+    const segmentCost = brickCost + cementCost + sandCost + plasterCost
 
     return {
       area,
       volume: vol,
       bricks,
       cementBags,
+      sandVol,
       brickCost,
+      cementCost,
+      sandCost,
       plasterCost,
       totalCost: segmentCost
     }
@@ -252,6 +302,7 @@ export default function Project3DBuildingTab() {
             rooms={rooms}
             doors={doors}
             windows={windows}
+            columns={columns}
             floorHeight={floorHeight}
             scaleFactor={0.015}
             selectedRoomId={selectedRoomId}

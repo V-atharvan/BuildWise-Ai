@@ -5,8 +5,11 @@ import { useParams, useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { RefreshCw, ShieldAlert, DoorOpen, AppWindow } from 'lucide-react'
 import { FloorPlanViewer } from '@/components/floor-plan/FloorPlanViewer'
-import { RoomDashboard } from '@/components/floor-plan/RoomDashboard'
-import type { AIRoom as DetectedRoom, AIWall as DetectedWall, AIDoor, AIWindow } from '@/lib/floor-plan-ai/types'
+import { RoomCorrectionPanel } from '@/components/floor-plan/RoomCorrectionPanel'
+import type { 
+  AIRoom as DetectedRoom, AIWall as DetectedWall, AIDoor, AIWindow,
+  AIColumn, AIStaircase, GeometryRelationships
+} from '@/lib/floor-plan-ai/types'
 
 export default function ProjectFloorPlansTab() {
   const router = useRouter()
@@ -17,6 +20,13 @@ export default function ProjectFloorPlansTab() {
   const [walls, setWalls] = useState<DetectedWall[]>([])
   const [doors, setDoors] = useState<AIDoor[]>([])
   const [windows, setWindows] = useState<AIWindow[]>([])
+  const [columns, setColumns] = useState<AIColumn[]>([])
+  const [staircases, setStaircases] = useState<AIStaircase[]>([])
+  const [relationships, setRelationships] = useState<GeometryRelationships | undefined>(undefined)
+  const [drawingClassification, setDrawingClassification] = useState<any>(undefined)
+  const [imageQuality, setImageQuality] = useState<any>(undefined)
+  const [geometryValidation, setGeometryValidation] = useState<any>(undefined)
+  const [pxPerMeter, setPxPerMeter] = useState<number>(50)
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null)
   const [floorHeight, setFloorHeight] = useState(3.0)
   const [wallThickness, setWallThickness] = useState(0.23)
@@ -48,8 +58,15 @@ export default function ProjectFloorPlansTab() {
       setWalls(dd.walls || [])
       setDoors(dd.doors || [])
       setWindows(dd.windows || [])
+      setColumns(dd.columns || [])
+      setStaircases(dd.staircases || [])
+      setRelationships(dd.relationships)
+      setDrawingClassification(dd.drawing_classification)
+      setImageQuality(dd.image_quality)
+      setGeometryValidation(dd.geometry_validation)
       setFloorHeight(dd.floor_height_m || 3.0)
       setWallThickness(dd.wall_thickness_m || 0.23)
+      setPxPerMeter(dd.scale?.px_per_meter || 50)
     } else if (isStaticDemo) {
       // High-fidelity demo with full confidence and classification data
       const demoRooms: DetectedRoom[] = [
@@ -130,11 +147,62 @@ export default function ProjectFloorPlansTab() {
         { id: 'w2', wall_id: 'w1', room_id: 'r2', center: [616,100], width_m: 1.2, height_m: 1.2, sill_height_m: 0.9, confidence: 0.88 },
         { id: 'w3', wall_id: 'w2', room_id: 'r3', center: [100,500], width_m: 1.0, height_m: 1.0, sill_height_m: 1.0, confidence: 0.85 },
       ]
+      const demoColumns = [
+        { id: 'col_1', shape: 'square' as const, center: [100, 100] as [number, number], width_px: 30, height_px: 30, size_m: [0.45, 0.45] as [number, number], connected_beam_ids: [], confidence: 0.98 },
+        { id: 'col_2', shape: 'square' as const, center: [466, 100] as [number, number], width_px: 30, height_px: 30, size_m: [0.45, 0.45] as [number, number], connected_beam_ids: [], confidence: 0.95 },
+        { id: 'col_3', shape: 'square' as const, center: [766, 100] as [number, number], width_px: 30, height_px: 30, size_m: [0.45, 0.45] as [number, number], connected_beam_ids: [], confidence: 0.96 },
+        { id: 'col_4', shape: 'square' as const, center: [100, 400] as [number, number], width_px: 30, height_px: 30, size_m: [0.45, 0.45] as [number, number], connected_beam_ids: [], confidence: 0.94 },
+      ]
+      const demoStaircases = [
+        { id: 'staircase_1', stair_type: 'dog_leg' as const, start_px: [120, 300] as [number, number], end_px: [200, 380] as [number, number], direction: 'up' as const, num_flights: 2, landing_detected: true, confidence: 0.92 }
+      ]
+      const demoClassification = {
+        drawing_type: 'architectural',
+        confidence: 0.99,
+        is_architectural_floor_plan: true
+      }
+      const demoQuality = {
+        score: 85,
+        problems: ['Slight Noise'],
+        recommendations: ['Optimal image contrast. Ready for structural estimation.'],
+        brightness: 180,
+        contrast: 150,
+        blur_index: 8.5,
+        is_skewed: false
+      }
+      const demoRelationships = {
+        room_wall_adjacency: { 'r1': ['w2', 'w4'], 'r2': ['w1', 'w4'], 'r3': ['w2'], 'r4': ['w3'] },
+        room_connectivity_graph: { 'r1': ['r2'], 'r2': ['r1'], 'r3': ['r4'], 'r4': ['r3'] },
+        door_connectivity_graph: {
+          'd1': { door_id: 'd1', room_a: 'r1', room_b: 'r2' },
+          'd2': { door_id: 'd2', room_a: 'r2', room_b: null },
+          'd3': { door_id: 'd3', room_a: 'r4', room_b: 'r3' }
+        },
+        window_connectivity_graph: {
+          'w1': { window_id: 'w1', room_id: 'r1' },
+          'w2': { window_id: 'w2', room_id: 'r2' },
+          'w3': { window_id: 'w3', room_id: 'r3' }
+        },
+        building_boundary: [[100,100],[766,100],[766,366],[533,366],[533,533],[366,533],[366,600],[100,600]] as [number, number][],
+        wall_centerlines: [
+          { wall_id: 'w1', start: [100,100] as [number, number], end: [766,100] as [number, number] },
+          { wall_id: 'w2', start: [100,100] as [number, number], end: [100,600] as [number, number] },
+          { wall_id: 'w3', start: [100,400] as [number, number], end: [533,400] as [number, number] },
+          { wall_id: 'w4', start: [466,100] as [number, number], end: [466,400] as [number, number] }
+        ]
+      }
 
       setRooms(demoRooms)
       setWalls(demoWalls)
       setDoors(demoDoors)
       setWindows(demoWindows)
+      setColumns(demoColumns)
+      setStaircases(demoStaircases)
+      setRelationships(demoRelationships)
+      setDrawingClassification(demoClassification)
+      setImageQuality(demoQuality)
+      setGeometryValidation({ is_valid: true, issues: [], rooms_validated: 4, walls_validated: 4, auto_corrections_applied: 0 })
+      setPxPerMeter(50)
 
       // Save to localStorage
       const mockPlan = {
@@ -145,6 +213,8 @@ export default function ProjectFloorPlansTab() {
         created_at: new Date().toISOString(),
         detected_data: {
           rooms: demoRooms, walls: demoWalls, doors: demoDoors, windows: demoWindows,
+          columns: demoColumns, staircases: demoStaircases, relationships: demoRelationships,
+          drawing_classification: demoClassification, image_quality: demoQuality,
           floor_height_m: 3.0, wall_thickness_m: 0.23, total_area_m2: 59.8, total_area_sqft: 644,
           overall_confidence: 0.81, low_confidence_room_ids: ['r2', 'r4'],
           geometry_validation: { is_valid: true, issues: [], rooms_validated: 4, walls_validated: 4, auto_corrections_applied: 0 }
@@ -157,13 +227,27 @@ export default function ProjectFloorPlansTab() {
       setWalls([])
       setDoors([])
       setWindows([])
+      setColumns([])
+      setStaircases([])
+      setRelationships(undefined)
+      setDrawingClassification(undefined)
+      setImageQuality(undefined)
+      setGeometryValidation(undefined)
     }
     setIsLoading(false)
   }, [projectId])
 
   const selectedRoom = rooms.find(r => r.id === selectedRoomId) ?? null
 
-  const persistRooms = (updatedRooms: DetectedRoom[]) => {
+  const persistState = (
+    updatedRooms: DetectedRoom[],
+    updatedWalls: DetectedWall[],
+    updatedDoors: AIDoor[],
+    updatedWindows: AIWindow[],
+    ratio: number,
+    height: number,
+    thickness: number
+  ) => {
     const planKey = Object.keys(localStorage).find(k =>
       k.startsWith('bw_demo_plan_') &&
       (JSON.parse(localStorage.getItem(k) || '{}').project_id === projectId ||
@@ -173,9 +257,95 @@ export default function ProjectFloorPlansTab() {
       const plan = JSON.parse(localStorage.getItem(planKey) || '{}')
       if (plan.detected_data) {
         plan.detected_data.rooms = updatedRooms
+        plan.detected_data.walls = updatedWalls
+        plan.detected_data.doors = updatedDoors
+        plan.detected_data.windows = updatedWindows
+        plan.detected_data.floor_height_m = height
+        plan.detected_data.wall_thickness_m = thickness
+        if (plan.detected_data.scale) {
+          plan.detected_data.scale.px_per_meter = ratio
+        } else {
+          plan.detected_data.scale = {
+            px_per_meter: ratio,
+            detected_scale: '1:100',
+            unit: 'meters',
+            confidence: 0.9,
+            source: 'estimated',
+            scale_bar_detected: false,
+            user_confirmed: true
+          }
+        }
         localStorage.setItem(planKey, JSON.stringify(plan))
       }
     }
+  }
+
+  const handleFloorHeightChange = (height: number) => {
+    setFloorHeight(height)
+    const updatedRooms = rooms.map(r => ({
+      ...r,
+      floor_height_m: height
+    }))
+    setRooms(updatedRooms)
+    persistState(updatedRooms, walls, doors, windows, pxPerMeter, height, wallThickness)
+  }
+
+  const handleWallThicknessChange = (thickness: number) => {
+    setWallThickness(thickness)
+    const updatedWalls = walls.map(w => ({
+      ...w,
+      thickness_m: thickness,
+      thickness_px: thickness * pxPerMeter
+    }))
+    setWalls(updatedWalls)
+    persistState(rooms, updatedWalls, doors, windows, pxPerMeter, floorHeight, thickness)
+  }
+
+  const handlePxPerMeterChange = (ratio: number) => {
+    if (ratio <= 0) return
+    setPxPerMeter(ratio)
+    const updatedRooms = rooms.map(r => {
+      const [,, wPx, hPx] = r.bounding_box
+      const length_m = wPx / ratio
+      const width_m = hPx / ratio
+      const area_m2 = (r.area_m2 * (pxPerMeter * pxPerMeter)) / (ratio * ratio)
+      return {
+        ...r,
+        length_m,
+        width_m,
+        area_m2,
+        area_sqft: area_m2 * 10.7639,
+        perimeter_m: (r.perimeter_m * pxPerMeter) / ratio
+      }
+    })
+
+    const updatedWalls = walls.map(w => {
+      return {
+        ...w,
+        length_m: w.length_px / ratio,
+        thickness_m: w.thickness_px / ratio
+      }
+    })
+
+    const updatedDoors = doors.map(d => {
+      return {
+        ...d,
+        width_m: (d.width_m * pxPerMeter) / ratio
+      }
+    })
+
+    const updatedWindows = windows.map(win => {
+      return {
+        ...win,
+        width_m: (win.width_m * pxPerMeter) / ratio
+      }
+    })
+
+    setRooms(updatedRooms)
+    setWalls(updatedWalls)
+    setDoors(updatedDoors)
+    setWindows(updatedWindows)
+    persistState(updatedRooms, updatedWalls, updatedDoors, updatedWindows, ratio, floorHeight, wallThickness)
   }
 
   const handleRoomRename = (roomId: string, newLabel: string) => {
@@ -190,7 +360,7 @@ export default function ProjectFloorPlansTab() {
       } : undefined
     } : r) as DetectedRoom[]
     setRooms(updated)
-    persistRooms(updated)
+    persistState(updated, walls, doors, windows, pxPerMeter, floorHeight, wallThickness)
   }
 
   const handleRoomDelete = (roomId: string) => {
@@ -198,7 +368,7 @@ export default function ProjectFloorPlansTab() {
       const updated = rooms.filter(r => r.id !== roomId)
       setRooms(updated)
       setSelectedRoomId(null)
-      persistRooms(updated)
+      persistState(updated, walls, doors, windows, pxPerMeter, floorHeight, wallThickness)
     }
   }
 
@@ -226,7 +396,7 @@ export default function ProjectFloorPlansTab() {
       const updated = [...rooms.filter(r => r.id !== roomIdA && r.id !== roomIdB), mergedRoom]
       setRooms(updated)
       setSelectedRoomId(mergedRoom.id)
-      persistRooms(updated)
+      persistState(updated, walls, doors, windows, pxPerMeter, floorHeight, wallThickness)
       setIsProcessing(false)
     }, 800)
   }
@@ -290,32 +460,48 @@ export default function ProjectFloorPlansTab() {
         ))}
       </div>
 
-      {/* Floor Plan Viewer */}
-      <FloorPlanViewer
-        imageUrl={imageUrl}
-        imageWidth={1000}
-        imageHeight={800}
-        rooms={rooms}
-        walls={walls}
-        doors={doors}
-        windows={windows}
-        selectedRoomId={selectedRoomId}
-        onRoomClick={(room) => setSelectedRoomId(room.id)}
-        onRoomRename={handleRoomRename}
-        onRoomDelete={handleRoomDelete}
-        onRoomMerge={handleRoomMerge}
-      />
-
-      {/* Room Dashboard Slide-out */}
-      {selectedRoom && (
-        <RoomDashboard
-          room={selectedRoom as any}
-          floorHeight={floorHeight}
-          wallThickness={wallThickness}
-          onClose={() => setSelectedRoomId(null)}
-          onView3D={() => router.push(`/projects/${projectId}/3d-building`)}
-        />
-      )}
+      {/* Split view */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="lg:col-span-2">
+          <FloorPlanViewer
+            imageUrl={imageUrl}
+            imageWidth={1000}
+            imageHeight={800}
+            rooms={rooms}
+            walls={walls}
+            doors={doors}
+            windows={windows}
+            columns={columns}
+            staircases={staircases}
+            relationships={relationships}
+            selectedRoomId={selectedRoomId}
+            onRoomClick={(room) => setSelectedRoomId(room.id)}
+            onRoomRename={handleRoomRename}
+            onRoomDelete={handleRoomDelete}
+            onRoomMerge={handleRoomMerge}
+          />
+        </div>
+        <div className="lg:col-span-1 h-[650px]">
+          <RoomCorrectionPanel
+            rooms={rooms}
+            selectedRoomId={selectedRoomId}
+            onRoomSelect={setSelectedRoomId}
+            onRename={handleRoomRename}
+            onDelete={handleRoomDelete}
+            onMerge={handleRoomMerge}
+            isProcessing={isProcessing}
+            drawingClassification={drawingClassification}
+            imageQuality={imageQuality}
+            geometryValidation={geometryValidation}
+            floorHeight={floorHeight}
+            wallThickness={wallThickness}
+            pxPerMeter={pxPerMeter}
+            onFloorHeightChange={handleFloorHeightChange}
+            onWallThicknessChange={handleWallThicknessChange}
+            onPxPerMeterChange={handlePxPerMeterChange}
+          />
+        </div>
+      </div>
     </div>
   )
 }

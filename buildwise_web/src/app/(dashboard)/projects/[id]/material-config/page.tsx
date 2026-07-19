@@ -112,16 +112,16 @@ export default function ProjectMaterialConfigTab() {
   const cities = AVAILABLE_REGIONS[config.region_state] || []
 
   return (
-    <div className="max-w-[760px] mx-auto space-y-6 pt-4 pb-20">
+    <div className="w-full space-y-6 pt-4 pb-20">
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-        <h3 className="text-lg font-black tracking-tight">Project Material Configuration</h3>
-        <p className="text-[13px] text-black/40 dark:text-white/35 mt-1">
+        <h3 className="text-xl font-black tracking-tight">Project Material Configuration</h3>
+        <p className="text-[14px] text-black/40 dark:text-white/35 mt-1">
           Customize materials, brand selections, and pricing specific to this project workspace.
         </p>
       </motion.div>
 
       {/* Accordion Sections */}
-      <div className="space-y-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
         {SECTIONS.map((section) => {
           const isOpen = openSection === section.id
           return (
@@ -129,24 +129,24 @@ export default function ProjectMaterialConfigTab() {
               key={section.id}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-white dark:bg-[#1E1E24] border border-black/[0.06] dark:border-white/[0.06] rounded-[20px] overflow-hidden"
+              className="bg-white dark:bg-[#1E1E24] border border-black/[0.06] dark:border-white/[0.06] rounded-[24px] overflow-hidden"
             >
               <button
                 onClick={() => setOpenSection(isOpen ? '' : section.id)}
-                className="w-full flex items-center gap-3 p-5 text-left hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-all"
+                className="w-full min-h-[96px] flex items-center gap-5 px-8 py-6 text-left hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-all"
               >
-                <div className={`w-9 h-9 rounded-xl ${section.bg} flex items-center justify-center`}>
-                  <section.icon className={`w-4.5 h-4.5 w-[18px] h-[18px] ${section.color}`} />
+                <div className={`w-11 h-11 rounded-2xl ${section.bg} flex items-center justify-center`}>
+                  <section.icon className={`w-[22px] h-[22px] ${section.color}`} />
                 </div>
-                <span className="flex-1 font-bold text-[14px]">{section.label}</span>
-                <ChevronDown className={`w-4 h-4 text-black/30 dark:text-white/20 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                <span className="flex-1 font-extrabold text-[16px] text-black/85 dark:text-white/95">{section.label}</span>
+                <ChevronDown className={`w-5.5 h-5.5 text-black/30 dark:text-white/20 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {isOpen && (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
-                  className="px-5 pb-5 space-y-4 border-t border-black/[0.04] dark:border-white/[0.04] pt-4"
+                  className="px-6 pb-6 space-y-5 border-t border-black/[0.04] dark:border-white/[0.04] pt-5"
                 >
                   {/* REGION */}
                   {section.id === 'region' && (

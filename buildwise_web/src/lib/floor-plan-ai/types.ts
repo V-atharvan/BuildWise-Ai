@@ -178,12 +178,13 @@ export interface ImageEnhancementResult {
   enhanced_height: number
   rotation_applied_deg: number        // degrees of auto-correction applied
   enhancements_applied: string[]      // list of operations performed
+  image_quality?: ImageQualityResult
 }
 
 // ── Geometry Validation ─────────────────────────────────────────────────────
 
 export interface GeometryIssue {
-  type: 'overlapping_rooms' | 'unclosed_polygon' | 'floating_wall' | 'orphan_door' | 'gap_in_wall'
+  type: 'overlapping_rooms' | 'unclosed_polygon' | 'floating_wall' | 'orphan_door' | 'orphan_window' | 'column_outside_wall' | 'gap_in_wall'
   severity: 'warning' | 'error'
   element_ids: string[]
   description: string
@@ -198,6 +199,80 @@ export interface GeometryValidation {
   auto_corrections_applied: number
 }
 
+// ── Drawing Classification ──────────────────────────────────────────────────
+
+export type DrawingType =
+  | 'architectural'
+  | 'structural'
+  | 'electrical'
+  | 'plumbing'
+  | 'hvac'
+  | 'roof_plan'
+  | 'elevation'
+  | 'section'
+  | 'furniture_layout'
+  | 'unknown'
+
+export interface DrawingClassification {
+  drawing_type: DrawingType
+  confidence: number
+  is_architectural_floor_plan: boolean
+  warning_message?: string
+}
+
+// ── Image Validation ────────────────────────────────────────────────────────
+
+export interface ImageQualityResult {
+  score: number             // 0-100
+  problems: string[]        // e.g. ["low resolution", "slight rotation"]
+  recommendations: string[] // e.g. ["Enhance image before estimation"]
+  brightness: number        // 0-255
+  contrast: number          // 0-255
+  blur_index: number        // variance index
+  is_skewed: boolean
+}
+
+// ── Columns ─────────────────────────────────────────────────────────────────
+
+export type ColumnShape = 'square' | 'rectangular' | 'circular' | 'unknown'
+
+export interface AIColumn {
+  id: string
+  shape: ColumnShape
+  center: PixelPoint
+  width_px: number
+  height_px: number
+  size_m: [number, number]
+  connected_beam_ids: string[]
+  confidence: number
+}
+
+// ── Staircases ──────────────────────────────────────────────────────────────
+
+export type StaircaseType = 'straight' | 'dog_leg' | 'spiral' | 'l_shaped' | 'unknown'
+
+export interface AIStaircase {
+  id: string
+  stair_type: StaircaseType
+  start_px: PixelPoint
+  end_px: PixelPoint
+  direction: 'up' | 'down' | 'unknown'
+  num_flights: number
+  landing_detected: boolean
+  confidence: number
+}
+
+// ── Relationships ───────────────────────────────────────────────────────────
+
+export interface GeometryRelationships {
+  room_wall_adjacency: Record<string, string[]> // room_id -> wall_ids
+  room_connectivity_graph: Record<string, string[]> // room_id -> room_ids connected by doors
+  door_connectivity_graph: Record<string, { door_id: string; room_a: string; room_b: string | null }>
+  window_connectivity_graph: Record<string, { window_id: string; room_id: string }>
+  building_boundary: PixelPoint[]
+  wall_centerlines: { wall_id: string; start: PixelPoint; end: PixelPoint }[]
+}
+
 // ── Full Analysis Result ────────────────────────────────────────────────────
 
 export interface FloorPlanAnalysisResult {
@@ -208,8 +283,10 @@ export interface FloorPlanAnalysisResult {
   analyzed_at: string                 // ISO timestamp
   pipeline_version: string
 
-  // Image
+  // Image & Drawing Analysis
   image_enhancement: ImageEnhancementResult
+  image_quality?: ImageQualityResult
+  drawing_classification?: DrawingClassification
 
   // Scale
   scale: ScaleInfo
@@ -219,6 +296,11 @@ export interface FloorPlanAnalysisResult {
   walls: AIWall[]
   doors: AIDoor[]
   windows: AIWindow[]
+  columns?: AIColumn[]
+  staircases?: AIStaircase[]
+
+  // Relationships
+  relationships?: GeometryRelationships
 
   // OCR
   ocr_regions: OCRTextRegion[]
@@ -231,6 +313,8 @@ export interface FloorPlanAnalysisResult {
   door_count: number
   window_count: number
   wall_count: number
+  column_count?: number
+  staircase_count?: number
   floor_height_m: number
   wall_thickness_m: number
 
@@ -322,6 +406,11 @@ export interface PlanStorageRecord {
     walls: AIWall[]
     doors: AIDoor[]
     windows: AIWindow[]
+    columns?: AIColumn[]
+    staircases?: AIStaircase[]
+    relationships?: GeometryRelationships
+    drawing_classification?: DrawingClassification
+    image_quality?: ImageQualityResult
     scale: ScaleInfo
     floor_height_m: number
     wall_thickness_m: number
@@ -332,3 +421,4 @@ export interface PlanStorageRecord {
     geometry_validation: GeometryValidation
   }
 }
+

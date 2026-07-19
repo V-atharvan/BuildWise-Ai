@@ -61,9 +61,14 @@ export function generateBOQItems(estimation: any): BOQItem[] {
   add('Waterproofing Barrier Layer chemical coat (terrace/bathroom)', m.waterproofing_area || 0, 'm²', c.waterproofing_cost / (m.waterproofing_area || 1), c.waterproofing_cost || 0, 'Finishes & Paint')
 
   // 5. Openings & Earthwork
+  const doorsCount = m.doors_count ?? m.doors?.total_count ?? 0
+  const doorCost = c.door_cost ?? (doorsCount * 4500)
+  const windowsCount = m.windows_count ?? m.windows?.total_count ?? 0
+  const windowCost = c.window_cost ?? (windowsCount * 3500)
+
   add('Earthwork Excavation for isolated/raft foundations', m.excavation_volume || 0, 'm³', c.excavation_cost / (m.excavation_volume || 1), c.excavation_cost || 0, 'Civil & Earthwork')
-  add('Premium Doors with Teakwood/Plywood frames', m.doors?.total_count || 0, 'nos', c.door_cost / (m.doors?.total_count || 1), c.door_cost || 0, 'Openings & Carpentry')
-  add('Aluminium sliding / UPVC Windows with glass paneling', m.windows?.total_count || 0, 'nos', c.window_cost / (m.windows?.total_count || 1), c.window_cost || 0, 'Openings & Carpentry')
+  add('Premium Doors with Teakwood/Plywood frames', doorsCount, 'nos', doorCost / (doorsCount || 1), doorCost, 'Openings & Carpentry')
+  add('Aluminium sliding / UPVC Windows with glass paneling', windowsCount, 'nos', windowCost / (windowsCount || 1), windowCost, 'Openings & Carpentry')
 
   return items
 }
