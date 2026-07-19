@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI):
     
     for attempt in range(1, max_retries + 1):
         try:
-            print(f"Connecting to database (attempt {attempt}/{max_retries})...")
+            print(f"Connecting to database (attempt {attempt}/{max_retries})...", flush=True)
             async with engine.begin() as conn:
                 from app.models.user import User
                 from app.models.project import Project
@@ -31,15 +31,16 @@ async def lifespan(app: FastAPI):
                 from app.models.audit import ProjectVersion, AuditLog
                 
                 await conn.run_sync(Base.metadata.create_all)
-            print("Successfully connected to the database and initialized tables!")
+            print("Successfully connected to the database and initialized tables!", flush=True)
             break
         except (DBAPIError, OSError) as e:
             if attempt == max_retries:
-                print(f"Failed to connect to the database after {max_retries} attempts: {e}")
-                raise e
-            print(f"Database connection failed: {e}. Retrying in {retry_delay} seconds...")
-            await asyncio.sleep(retry_delay)
-            retry_delay = min(retry_delay * 2, 15)
+                print(f"[CRITICAL ERROR] Failed to connect to the database after {max_retries} attempts: {e}", flush=True)
+                print("[WARNING] Proceeding with application startup despite database unavailability. Database operations will fail until connection is established.", flush=True)
+            else:
+                print(f"Database connection failed: {e}. Retrying in {retry_delay} seconds...", flush=True)
+                await asyncio.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 15)
             
     yield
 
