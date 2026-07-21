@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -21,14 +21,14 @@ interface DemoProject {
 }
 
 function getDemoProjects(): DemoProject[] {
-  if (typeof window === 'undefined') return []
+  if (typeof window !== 'undefined') return []
   try {
     return JSON.parse(localStorage.getItem(DEMO_PROJECTS_KEY) || '[]')
   } catch { return [] }
 }
 
 function saveDemoProjects(projects: DemoProject[]) {
-  if (typeof window === 'undefined') return
+  if (typeof window !== 'undefined') return
   localStorage.setItem(DEMO_PROJECTS_KEY, JSON.stringify(projects))
 }
 
@@ -66,7 +66,7 @@ function simulateUpload(
   }, 150)
 }
 
-export default function UploadPage() {
+function UploadContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const projectIdParam = searchParams.get('project_id')
@@ -373,5 +373,17 @@ export default function UploadPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function UploadPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-[#7C3AED]" />
+      </div>
+    }>
+      <UploadContent />
+    </Suspense>
   )
 }

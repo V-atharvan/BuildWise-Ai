@@ -1,7 +1,7 @@
 'use client'
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Suspense } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import Link from 'next/link'
 import {
@@ -28,7 +28,7 @@ const COLORS = ['#7C3AED', '#A78BFA', '#C4B5FD', '#F59E0B', '#10B981', '#EF4444'
 
 type ActiveTab = 'dashboard' | 'rooms' | 'walls' | 'labor' | 'settings'
 
-export default function EstimatePage() {
+function EstimateContent() {
   const { id: projectId } = useParams() as { id: string }
   const searchParams = useSearchParams()
   const estimationId = searchParams.get('estimation_id')
@@ -326,48 +326,52 @@ export default function EstimatePage() {
     )
   }
 
-  const materials = estimation.materials
-  const cost = estimation.cost_breakdown
+  const materials = estimation?.materials || {}
+  const cost = estimation?.cost_breakdown || {}
+
+  const concreteCost = (cost.cement_cost || 0) + (cost.sand_cost || 0) + (cost.aggregate_cost || 0)
+  const brickCostSum = (cost.brick_cost || 0) + (cost.block_cost || 0)
+  const grandTotal = cost.grand_total || 0
 
   // Pie chart cost distribution
   const pieData = [
-    { name: 'Masonry / Bricks', value: cost.brick_cost + cost.block_cost },
-    { name: 'Cement Bags', value: cost.cement_cost },
-    { name: 'Steel TMT', value: cost.steel_cost },
-    { name: 'Sand & Aggregate', value: cost.sand_cost + cost.aggregate_cost },
-    { name: 'Finishes & Plaster', value: cost.plaster_cost + cost.paint_cost },
-    { name: 'Flooring Tiles', value: cost.tiles_cost },
-    { name: 'Labour Outturns', value: cost.labour_cost },
-    { name: 'Excavation & Shutter', value: cost.excavation_cost + cost.equipment_cost + cost.transport_cost + cost.waterproofing_cost }
+    { name: 'Masonry / Bricks', value: brickCostSum },
+    { name: 'Cement Bags', value: cost.cement_cost || 0 },
+    { name: 'Steel TMT', value: cost.steel_cost || 0 },
+    { name: 'Sand & Aggregate', value: (cost.sand_cost || 0) + (cost.aggregate_cost || 0) },
+    { name: 'Finishes & Plaster', value: (cost.plaster_cost || 0) + (cost.paint_cost || 0) },
+    { name: 'Flooring Tiles', value: cost.tiles_cost || 0 },
+    { name: 'Labour Outturns', value: cost.labour_cost || 0 },
+    { name: 'Excavation & Shutter', value: (cost.excavation_cost || 0) + (cost.equipment_cost || 0) + (cost.transport_cost || 0) + (cost.waterproofing_cost || 0) }
   ].filter(item => item.value > 0)
 
   // Recalculating charts data
-  const roomCostBarData = estimation.room_takeoffs?.map((r: any) => ({
+  const roomCostBarData = estimation?.room_takeoffs?.map((r: any) => ({
     name: r.label,
-    cost: r.total_cost,
-    area: r.area_m2
+    cost: r.total_cost || 0,
+    area: r.area_m2 || 0
   })) || []
 
   const cashFlowData = [
-    { month: 'Month 1 (Excavation)', cumulative: Math.round(cost.grand_total * 0.12), monthly: Math.round(cost.grand_total * 0.12) },
-    { month: 'Month 2 (Foundation)', cumulative: Math.round(cost.grand_total * 0.32), monthly: Math.round(cost.grand_total * 0.20) },
-    { month: 'Month 3 (RCC Frame)', cumulative: Math.round(cost.grand_total * 0.60), monthly: Math.round(cost.grand_total * 0.28) },
-    { month: 'Month 4 (Brickwork)', cumulative: Math.round(cost.grand_total * 0.78), monthly: Math.round(cost.grand_total * 0.18) },
-    { month: 'Month 5 (Plastering)', cumulative: Math.round(cost.grand_total * 0.92), monthly: Math.round(cost.grand_total * 0.14) },
-    { month: 'Month 6 (Finishing)', cumulative: Math.round(cost.grand_total * 1.00), monthly: Math.round(cost.grand_total * 0.08) },
+    { month: 'Month 1 (Excavation)', cumulative: Math.round(grandTotal * 0.12), monthly: Math.round(grandTotal * 0.12) },
+    { month: 'Month 2 (Foundation)', cumulative: Math.round(grandTotal * 0.32), monthly: Math.round(grandTotal * 0.20) },
+    { month: 'Month 3 (RCC Frame)', cumulative: Math.round(grandTotal * 0.60), monthly: Math.round(grandTotal * 0.28) },
+    { month: 'Month 4 (Brickwork)', cumulative: Math.round(grandTotal * 0.78), monthly: Math.round(grandTotal * 0.18) },
+    { month: 'Month 5 (Plastering)', cumulative: Math.round(grandTotal * 0.92), monthly: Math.round(grandTotal * 0.14) },
+    { month: 'Month 6 (Finishing)', cumulative: Math.round(grandTotal * 1.00), monthly: Math.round(grandTotal * 0.08) },
   ]
 
   const materialConsumptionData = [
-    { category: 'Foundation', Concrete: Math.round(cost.concrete_cost * 0.4), Masonry: 0, Finishing: 0 },
-    { category: 'Plinth Level', Concrete: Math.round(cost.concrete_cost * 0.3), Masonry: Math.round((cost.brick_cost + cost.block_cost) * 0.1), Finishing: 0 },
-    { category: 'Superstructure', Concrete: Math.round(cost.concrete_cost * 0.3), Masonry: Math.round((cost.brick_cost + cost.block_cost) * 0.9), Finishing: 0 },
-    { category: 'Finishing & Coats', Concrete: 0, Masonry: 0, Finishing: Math.round(cost.plaster_cost + cost.paint_cost + cost.tiles_cost) },
+    { category: 'Foundation', Concrete: Math.round(concreteCost * 0.4), Masonry: 0, Finishing: 0 },
+    { category: 'Plinth Level', Concrete: Math.round(concreteCost * 0.3), Masonry: Math.round(brickCostSum * 0.1), Finishing: 0 },
+    { category: 'Superstructure', Concrete: Math.round(concreteCost * 0.3), Masonry: Math.round(brickCostSum * 0.9), Finishing: 0 },
+    { category: 'Finishing & Coats', Concrete: 0, Masonry: 0, Finishing: Math.round((cost.plaster_cost || 0) + (cost.paint_cost || 0) + (cost.tiles_cost || 0)) },
   ]
 
-  const masonDays = Math.ceil(materials.net_wall_volume_m3 / 1.25)
-  const helperDays = Math.ceil(materials.excavation_volume / 3.5 + materials.concrete_volume / 2.5)
-  const benderDays = Math.ceil(materials.steel_weight / 150)
-  const carpenterDays = Math.ceil(materials.concrete_volume * 4.5 / 15.0)
+  const masonDays = Math.ceil((materials.net_wall_volume_m3 || 0) / 1.25) || 0
+  const helperDays = Math.ceil((materials.excavation_volume || 0) / 3.5 + (materials.concrete_volume || 0) / 2.5) || 0
+  const benderDays = Math.ceil((materials.steel_weight || 0) / 150) || 0
+  const carpenterDays = Math.ceil((materials.concrete_volume || 0) * 4.5 / 15.0) || 0
   const supervisorDays = 12
 
   const labourBarData = [
@@ -382,14 +386,14 @@ export default function EstimatePage() {
     {
       name: 'RCC Frame',
       children: [
-        { name: 'Concrete Mix', value: Math.round(cost.concrete_cost || 1) },
+        { name: 'Concrete Mix', value: Math.round(concreteCost || 1) },
         { name: 'Reinforcement', value: Math.round(cost.steel_cost || 1) }
       ]
     },
     {
       name: 'Masonry/Plaster',
       children: [
-        { name: 'Bricks & Blocks', value: Math.round(cost.brick_cost + cost.block_cost || 1) },
+        { name: 'Bricks & Blocks', value: Math.round(brickCostSum || 1) },
         { name: 'Plaster coats', value: Math.round(cost.plaster_cost || 1) }
       ]
     },
@@ -1405,5 +1409,17 @@ export default function EstimatePage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function EstimatePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-[#7C3AED]" />
+      </div>
+    }>
+      <EstimateContent />
+    </Suspense>
   )
 }
