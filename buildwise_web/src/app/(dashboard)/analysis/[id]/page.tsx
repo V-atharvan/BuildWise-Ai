@@ -164,7 +164,7 @@ export default function AnalysisProgressPage() {
     if (stored) {
       try {
         const plan = JSON.parse(stored)
-        if (plan.status === 'done' && plan.detected_data) {
+        if (plan.status === 'done' && plan.detected_data && plan.detected_data.rooms?.length > 0) {
           setSteps(PIPELINE_STEPS.map(s => ({ ...s, status: 'done' as const, progress: 100 })))
           setAnalysisResult(plan.detected_data)
           setTotalArea(plan.detected_data.total_area_sqft || 644)
@@ -237,6 +237,16 @@ export default function AnalysisProgressPage() {
           setTotalArea(Math.round(r.total_area_sqft) || 1500)
           setWallThickness(r.wall_thickness_m || 0.23)
           setProjectId(r.project_id)
+
+          const planObj = stored ? JSON.parse(stored) : {}
+          const updatedPlan = {
+            ...planObj,
+            id: planId,
+            project_id: r.project_id || plan.project_id || planId,
+            status: 'done',
+            detected_data: r,
+          }
+          localStorage.setItem(`bw_demo_plan_${planId}`, JSON.stringify(updatedPlan))
         }
         const hasError = updatedSteps.some(s => s.status === 'error')
         if (hasError) {

@@ -187,7 +187,7 @@ function UploadContent() {
             project_id: activeProjectId,
             filename: file.name,
             file_size: file.size,
-            status: 'done',
+            status: 'processing',
             created_at: new Date().toISOString(),
           }))
           router.push(`/analysis/${planId}`)

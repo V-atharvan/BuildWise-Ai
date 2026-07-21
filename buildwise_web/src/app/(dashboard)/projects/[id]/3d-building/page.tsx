@@ -44,10 +44,12 @@ export default function Project3DBuildingTab() {
       console.error(e)
     }
 
-    const planData = Object.keys(localStorage)
+    const allDemoPlans = Object.keys(localStorage)
       .filter(k => k.startsWith('bw_demo_plan_'))
-      .map(k => JSON.parse(localStorage.getItem(k) || '{}'))
-      .find(p => p.project_id === projectId || p.id === projectId)
+      .map(k => { try { return JSON.parse(localStorage.getItem(k) || '{}') } catch { return {} } })
+
+    const planData = allDemoPlans.find(p => (p.project_id === projectId || p.id === projectId) && p.detected_data?.rooms)
+      || allDemoPlans.find(p => p.detected_data?.rooms)
 
     const isDemoPlanFile = (filename?: string) => {
       if (!filename) return true
