@@ -473,7 +473,7 @@ export default function AnalysisProgressPage() {
               <div>
                 <h2 className="text-lg font-black tracking-tight">Configure AI Engine</h2>
                 <p className="text-[12.5px] text-black/40 dark:text-white/35 mt-0.5">
-                  Enter your Gemini API key to enable real AI floor plan analysis
+                  Enter your Vision AI API key to enable real AI floor plan analysis
                 </p>
               </div>
             </div>
@@ -482,7 +482,7 @@ export default function AnalysisProgressPage() {
               <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
               <p className="text-[12px] text-blue-600 dark:text-blue-400">
                 Your key is stored locally in your browser and never sent to our servers.
-                Get a free key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="font-bold underline">Google AI Studio</a>.
+                Get a free key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="font-bold underline">AI Portal</a>.
               </p>
             </div>
 
@@ -548,7 +548,7 @@ export default function AnalysisProgressPage() {
               <div className="flex-1">
                 <h2 className="text-lg font-black tracking-tight">AI Architect Pipeline</h2>
                 <p className="text-[12.5px] text-black/40 dark:text-white/35 mt-0.5">
-                  Hybrid AI: Gemini Vision · Computer Vision · Geometry Processing
+                  Hybrid AI: BuildWise Vision AI · Computer Vision · Geometry Processing
                 </p>
               </div>
               <div className="text-right">
