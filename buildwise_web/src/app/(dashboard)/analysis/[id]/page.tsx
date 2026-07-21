@@ -160,6 +160,23 @@ export default function AnalysisProgressPage() {
 
   // ── Start pipeline on mount ──────────────────────────────────────────────
   useEffect(() => {
+    const stored = localStorage.getItem(`bw_demo_plan_${planId}`)
+    if (stored) {
+      try {
+        const plan = JSON.parse(stored)
+        if (plan.status === 'done' && plan.detected_data) {
+          setSteps(PIPELINE_STEPS.map(s => ({ ...s, status: 'done' as const, progress: 100 })))
+          setAnalysisResult(plan.detected_data)
+          setTotalArea(plan.detected_data.total_area_sqft || 644)
+          setWallThickness(plan.detected_data.wall_thickness_m || 0.23)
+          setProjectId(plan.project_id || planId)
+          setPipelineStatus('done')
+          setShowWizard(true)
+          return
+        }
+      } catch { /* ignore */ }
+    }
+
     startPipeline()
     return () => { abortRef.current?.abort() }
     // eslint-disable-next-line react-hooks/exhaustive-deps

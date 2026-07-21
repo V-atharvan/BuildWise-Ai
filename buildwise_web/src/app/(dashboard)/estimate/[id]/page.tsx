@@ -70,27 +70,47 @@ function EstimateContent() {
   const [wallSortField, setWallSortField] = useState<'name' | 'length' | 'cost'>('name')
   const [wallSortOrder, setWallSortOrder] = useState<'asc' | 'desc'>('asc')
 
-  // Load demo estimations from localStorage
-  const localEstimations = typeof window !== 'undefined'
-    ? (() => {
-        const results: any[] = []
-        try {
-          for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i)
-            if (!key?.startsWith('bw_demo_est_')) continue
-            const est = JSON.parse(localStorage.getItem(key) || '{}')
-            if (est.project_id === projectId || est.plan_id === planId) {
-              results.push(est)
-            }
-          }
-        } catch { /* ignore */ }
-        return results.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      })()
-    : []
+  // Load demo estimations from localStorage safely with useMemo
+  const initialEstimation = useMemo(() => {
+    if (typeof window === 'undefined') return null
+    try {
+      const results: any[] = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (!key?.startsWith('bw_demo_est_')) continue
+        const est = JSON.parse(localStorage.getItem(key) || '{}')
+        if (
+          est.project_id === projectId ||
+          est.plan_id === projectId ||
+          est.project_id === planId ||
+          est.plan_id === planId ||
+          est.id === estimationId
+        ) {
+          results.push(est)
+        }
+      }
+      results.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
 
-  const initialEstimation = estimationId
-    ? (localEstimations.find(e => e.id === estimationId) || (typeof window !== 'undefined' ? (() => { try { return JSON.parse(localStorage.getItem(`bw_demo_est_${estimationId}`) || 'null') } catch { return null } })() : null))
-    : (localEstimations.length > 0 ? localEstimations[0] : null)
+      if (estimationId) {
+        const found = results.find(e => e.id === estimationId) ||
+          JSON.parse(localStorage.getItem(`bw_demo_est_${estimationId}`) || 'null')
+        if (found) return found
+      }
+
+      if (results.length > 0) return results[0]
+
+      // Fallback: search any stored demo estimation
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (!key?.startsWith('bw_demo_est_')) continue
+        const est = JSON.parse(localStorage.getItem(key) || '{}')
+        if (est && est.materials && est.cost_breakdown) return est
+      }
+      return null
+    } catch {
+      return null
+    }
+  }, [projectId, planId, estimationId])
 
   // Load plan geometry from localStorage for dynamic recalculations
   const [planGeometry, setPlanGeometry] = useState<any>(null)
@@ -167,7 +187,7 @@ function EstimateContent() {
         })
       }
     }
-  }, [baseEstimation])
+  }, [baseEstimation?.id])
 
   // Live recalculate handler
   const handleParamChange = (key: keyof TakeoffParams, val: any) => {
@@ -666,7 +686,7 @@ function EstimateContent() {
                             <p className="text-black/50 dark:text-white/40 uppercase font-black text-[9px] tracking-wider mb-2">Structural Rebar Specs</p>
                             <div className="flex justify-between items-center py-1">
                               <span>High-Ductility Fe550D TMT Bars (Tata Tiscon / JSW)</span>
-                              <span className="font-semibold text-black/70">{materials.steel_weight.toLocaleString()} kg @ ₹{paramsState.rate_steel ?? 75}/kg</span>
+                              <span className="font-semibold text-black/70">{(materials?.steel_weight || 0).toLocaleString()} kg @ ₹{paramsState.rate_steel ?? 75}/kg</span>
                             </div>
                             <div className="flex justify-between items-center py-1 text-[11px] text-black/40 dark:text-white/30 border-t border-black/[0.03]">
                               <span>Nominal Steel weight ratio</span>
@@ -686,7 +706,7 @@ function EstimateContent() {
                             {expandedTrees.masonry ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                             <span>Masonry Blocks & Bricks</span>
                           </div>
-                          <span className="font-black text-violet-500">{formatCurrency(cost.brick_cost + cost.block_cost)}</span>
+                          <span className="font-black text-violet-500">{formatCurrency((cost?.brick_cost || 0) + (cost?.block_cost || 0))}</span>
                         </div>
                         {expandedTrees.masonry && (
                           <div className="p-3.5 bg-black/[0.02] dark:bg-white/[0.02] border-t border-black/[0.04] space-y-2 text-[12px]">
@@ -694,12 +714,12 @@ function EstimateContent() {
                             {paramsState.brick_type === 'aac_block' ? (
                               <div className="flex justify-between items-center py-1">
                                 <span>AAC Blocks (600x200x200 mm)</span>
-                                <span className="font-semibold text-black/70">{materials.blocks_count.toLocaleString()} pcs @ ₹{paramsState.rate_brick ?? 55}/pc</span>
+                                <span className="font-semibold text-black/70">{(materials?.blocks_count || 0).toLocaleString()} pcs @ ₹{paramsState.rate_brick ?? 55}/pc</span>
                               </div>
                             ) : (
                               <div className="flex justify-between items-center py-1">
                                 <span>Burnt Red Clay Bricks</span>
-                                <span className="font-semibold text-black/70">{materials.bricks_count.toLocaleString()} pcs @ ₹{paramsState.rate_brick ?? 10}/pc</span>
+                                <span className="font-semibold text-black/70">{(materials?.bricks_count || 0).toLocaleString()} pcs @ ₹{paramsState.rate_brick ?? 10}/pc</span>
                               </div>
                             )}
                             <div className="flex justify-between items-center py-1 text-[11px] text-black/40 dark:text-white/30 border-t border-black/[0.03]">
@@ -1143,11 +1163,11 @@ function EstimateContent() {
                   <span>Material Load Weight</span>
                   <span className="font-bold">
                     {(
-                      (((materials.bricks_count || 0) * 3.0) + ((materials.blocks_count || 0) * 12)) +
-                      (materials.cement_bags * 50) +
-                      (materials.steel_weight) +
-                      (materials.sand_volume * 1600) +
-                      (materials.aggregate_volume * 1500)
+                      (((materials?.bricks_count || 0) * 3.0) + ((materials?.blocks_count || 0) * 12)) +
+                      ((materials?.cement_bags || 0) * 50) +
+                      (materials?.steel_weight || 0) +
+                      ((materials?.sand_volume || 0) * 1600) +
+                      ((materials?.aggregate_volume || 0) * 1500)
                     ).toLocaleString(undefined, { maximumFractionDigits: 0 })} kg
                   </span>
                 </div>
@@ -1155,17 +1175,17 @@ function EstimateContent() {
                   <span>Approx Truck Trips</span>
                   <span className="font-bold">
                     {Math.ceil(
-                      (((materials.bricks_count || 0) * 3.0) + ((materials.blocks_count || 0) * 12) +
-                      (materials.cement_bags * 50) +
-                      (materials.steel_weight) +
-                      (materials.sand_volume * 1600) +
-                      (materials.aggregate_volume * 1500)) / 8000
+                      (((materials?.bricks_count || 0) * 3.0) + ((materials?.blocks_count || 0) * 12) +
+                      ((materials?.cement_bags || 0) * 50) +
+                      (materials?.steel_weight || 0) +
+                      ((materials?.sand_volume || 0) * 1600) +
+                      ((materials?.aggregate_volume || 0) * 1500)) / 8000
                     )} trips (8-ton trucks)
                   </span>
                 </div>
                 <div className="flex justify-between items-center py-2 border-b border-black/[0.05] dark:border-white/[0.05]">
                   <span>Logistics Transport Charge</span>
-                  <span className="font-bold text-violet-500">₹{cost.transport_cost.toLocaleString()}</span>
+                  <span className="font-bold text-violet-500">₹{(cost?.transport_cost || 0).toLocaleString()}</span>
                 </div>
               </div>
             </div>
