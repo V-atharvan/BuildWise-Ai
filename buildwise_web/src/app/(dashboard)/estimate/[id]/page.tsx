@@ -1,7 +1,7 @@
 'use client'
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { useState, useEffect, useMemo, Suspense } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import Link from 'next/link'
 import {
@@ -28,7 +28,7 @@ const COLORS = ['#7C3AED', '#A78BFA', '#C4B5FD', '#F59E0B', '#10B981', '#EF4444'
 
 type ActiveTab = 'dashboard' | 'rooms' | 'walls' | 'labor' | 'settings'
 
-function EstimateContent() {
+export default function EstimatePage() {
   const { id: projectId } = useParams() as { id: string }
   const searchParams = useSearchParams()
   const estimationId = searchParams.get('estimation_id')
@@ -70,47 +70,27 @@ function EstimateContent() {
   const [wallSortField, setWallSortField] = useState<'name' | 'length' | 'cost'>('name')
   const [wallSortOrder, setWallSortOrder] = useState<'asc' | 'desc'>('asc')
 
-  // Load demo estimations from localStorage safely with useMemo
-  const initialEstimation = useMemo(() => {
-    if (typeof window === 'undefined') return null
-    try {
-      const results: any[] = []
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i)
-        if (!key?.startsWith('bw_demo_est_')) continue
-        const est = JSON.parse(localStorage.getItem(key) || '{}')
-        if (
-          est.project_id === projectId ||
-          est.plan_id === projectId ||
-          est.project_id === planId ||
-          est.plan_id === planId ||
-          est.id === estimationId
-        ) {
-          results.push(est)
-        }
-      }
-      results.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+  // Load demo estimations from localStorage
+  const localEstimations = typeof window !== 'undefined'
+    ? (() => {
+        const results: any[] = []
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i)
+            if (!key?.startsWith('bw_demo_est_')) continue
+            const est = JSON.parse(localStorage.getItem(key) || '{}')
+            if (est.project_id === projectId || est.plan_id === planId) {
+              results.push(est)
+            }
+          }
+        } catch { /* ignore */ }
+        return results.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      })()
+    : []
 
-      if (estimationId) {
-        const found = results.find(e => e.id === estimationId) ||
-          JSON.parse(localStorage.getItem(`bw_demo_est_${estimationId}`) || 'null')
-        if (found) return found
-      }
-
-      if (results.length > 0) return results[0]
-
-      // Fallback: search any stored demo estimation
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i)
-        if (!key?.startsWith('bw_demo_est_')) continue
-        const est = JSON.parse(localStorage.getItem(key) || '{}')
-        if (est && est.materials && est.cost_breakdown) return est
-      }
-      return null
-    } catch {
-      return null
-    }
-  }, [projectId, planId, estimationId])
+  const initialEstimation = estimationId
+    ? (localEstimations.find(e => e.id === estimationId) || (typeof window !== 'undefined' ? (() => { try { return JSON.parse(localStorage.getItem(`bw_demo_est_${estimationId}`) || 'null') } catch { return null } })() : null))
+    : (localEstimations.length > 0 ? localEstimations[0] : null)
 
   // Load plan geometry from localStorage for dynamic recalculations
   const [planGeometry, setPlanGeometry] = useState<any>(null)
@@ -187,7 +167,7 @@ function EstimateContent() {
         })
       }
     }
-  }, [baseEstimation?.id])
+  }, [baseEstimation])
 
   // Live recalculate handler
   const handleParamChange = (key: keyof TakeoffParams, val: any) => {
@@ -346,52 +326,48 @@ function EstimateContent() {
     )
   }
 
-  const materials = estimation?.materials || {}
-  const cost = estimation?.cost_breakdown || {}
-
-  const concreteCost = (cost.cement_cost || 0) + (cost.sand_cost || 0) + (cost.aggregate_cost || 0)
-  const brickCostSum = (cost.brick_cost || 0) + (cost.block_cost || 0)
-  const grandTotal = cost.grand_total || 0
+  const materials = estimation.materials
+  const cost = estimation.cost_breakdown
 
   // Pie chart cost distribution
   const pieData = [
-    { name: 'Masonry / Bricks', value: brickCostSum },
-    { name: 'Cement Bags', value: cost.cement_cost || 0 },
-    { name: 'Steel TMT', value: cost.steel_cost || 0 },
-    { name: 'Sand & Aggregate', value: (cost.sand_cost || 0) + (cost.aggregate_cost || 0) },
-    { name: 'Finishes & Plaster', value: (cost.plaster_cost || 0) + (cost.paint_cost || 0) },
-    { name: 'Flooring Tiles', value: cost.tiles_cost || 0 },
-    { name: 'Labour Outturns', value: cost.labour_cost || 0 },
-    { name: 'Excavation & Shutter', value: (cost.excavation_cost || 0) + (cost.equipment_cost || 0) + (cost.transport_cost || 0) + (cost.waterproofing_cost || 0) }
+    { name: 'Masonry / Bricks', value: cost.brick_cost + cost.block_cost },
+    { name: 'Cement Bags', value: cost.cement_cost },
+    { name: 'Steel TMT', value: cost.steel_cost },
+    { name: 'Sand & Aggregate', value: cost.sand_cost + cost.aggregate_cost },
+    { name: 'Finishes & Plaster', value: cost.plaster_cost + cost.paint_cost },
+    { name: 'Flooring Tiles', value: cost.tiles_cost },
+    { name: 'Labour Outturns', value: cost.labour_cost },
+    { name: 'Excavation & Shutter', value: cost.excavation_cost + cost.equipment_cost + cost.transport_cost + cost.waterproofing_cost }
   ].filter(item => item.value > 0)
 
   // Recalculating charts data
-  const roomCostBarData = estimation?.room_takeoffs?.map((r: any) => ({
+  const roomCostBarData = estimation.room_takeoffs?.map((r: any) => ({
     name: r.label,
-    cost: r.total_cost || 0,
-    area: r.area_m2 || 0
+    cost: r.total_cost,
+    area: r.area_m2
   })) || []
 
   const cashFlowData = [
-    { month: 'Month 1 (Excavation)', cumulative: Math.round(grandTotal * 0.12), monthly: Math.round(grandTotal * 0.12) },
-    { month: 'Month 2 (Foundation)', cumulative: Math.round(grandTotal * 0.32), monthly: Math.round(grandTotal * 0.20) },
-    { month: 'Month 3 (RCC Frame)', cumulative: Math.round(grandTotal * 0.60), monthly: Math.round(grandTotal * 0.28) },
-    { month: 'Month 4 (Brickwork)', cumulative: Math.round(grandTotal * 0.78), monthly: Math.round(grandTotal * 0.18) },
-    { month: 'Month 5 (Plastering)', cumulative: Math.round(grandTotal * 0.92), monthly: Math.round(grandTotal * 0.14) },
-    { month: 'Month 6 (Finishing)', cumulative: Math.round(grandTotal * 1.00), monthly: Math.round(grandTotal * 0.08) },
+    { month: 'Month 1 (Excavation)', cumulative: Math.round(cost.grand_total * 0.12), monthly: Math.round(cost.grand_total * 0.12) },
+    { month: 'Month 2 (Foundation)', cumulative: Math.round(cost.grand_total * 0.32), monthly: Math.round(cost.grand_total * 0.20) },
+    { month: 'Month 3 (RCC Frame)', cumulative: Math.round(cost.grand_total * 0.60), monthly: Math.round(cost.grand_total * 0.28) },
+    { month: 'Month 4 (Brickwork)', cumulative: Math.round(cost.grand_total * 0.78), monthly: Math.round(cost.grand_total * 0.18) },
+    { month: 'Month 5 (Plastering)', cumulative: Math.round(cost.grand_total * 0.92), monthly: Math.round(cost.grand_total * 0.14) },
+    { month: 'Month 6 (Finishing)', cumulative: Math.round(cost.grand_total * 1.00), monthly: Math.round(cost.grand_total * 0.08) },
   ]
 
   const materialConsumptionData = [
-    { category: 'Foundation', Concrete: Math.round(concreteCost * 0.4), Masonry: 0, Finishing: 0 },
-    { category: 'Plinth Level', Concrete: Math.round(concreteCost * 0.3), Masonry: Math.round(brickCostSum * 0.1), Finishing: 0 },
-    { category: 'Superstructure', Concrete: Math.round(concreteCost * 0.3), Masonry: Math.round(brickCostSum * 0.9), Finishing: 0 },
-    { category: 'Finishing & Coats', Concrete: 0, Masonry: 0, Finishing: Math.round((cost.plaster_cost || 0) + (cost.paint_cost || 0) + (cost.tiles_cost || 0)) },
+    { category: 'Foundation', Concrete: Math.round(cost.concrete_cost * 0.4), Masonry: 0, Finishing: 0 },
+    { category: 'Plinth Level', Concrete: Math.round(cost.concrete_cost * 0.3), Masonry: Math.round((cost.brick_cost + cost.block_cost) * 0.1), Finishing: 0 },
+    { category: 'Superstructure', Concrete: Math.round(cost.concrete_cost * 0.3), Masonry: Math.round((cost.brick_cost + cost.block_cost) * 0.9), Finishing: 0 },
+    { category: 'Finishing & Coats', Concrete: 0, Masonry: 0, Finishing: Math.round(cost.plaster_cost + cost.paint_cost + cost.tiles_cost) },
   ]
 
-  const masonDays = Math.ceil((materials.net_wall_volume_m3 || 0) / 1.25) || 0
-  const helperDays = Math.ceil((materials.excavation_volume || 0) / 3.5 + (materials.concrete_volume || 0) / 2.5) || 0
-  const benderDays = Math.ceil((materials.steel_weight || 0) / 150) || 0
-  const carpenterDays = Math.ceil((materials.concrete_volume || 0) * 4.5 / 15.0) || 0
+  const masonDays = Math.ceil(materials.net_wall_volume_m3 / 1.25)
+  const helperDays = Math.ceil(materials.excavation_volume / 3.5 + materials.concrete_volume / 2.5)
+  const benderDays = Math.ceil(materials.steel_weight / 150)
+  const carpenterDays = Math.ceil(materials.concrete_volume * 4.5 / 15.0)
   const supervisorDays = 12
 
   const labourBarData = [
@@ -406,14 +382,14 @@ function EstimateContent() {
     {
       name: 'RCC Frame',
       children: [
-        { name: 'Concrete Mix', value: Math.round(concreteCost || 1) },
+        { name: 'Concrete Mix', value: Math.round(cost.concrete_cost || 1) },
         { name: 'Reinforcement', value: Math.round(cost.steel_cost || 1) }
       ]
     },
     {
       name: 'Masonry/Plaster',
       children: [
-        { name: 'Bricks & Blocks', value: Math.round(brickCostSum || 1) },
+        { name: 'Bricks & Blocks', value: Math.round(cost.brick_cost + cost.block_cost || 1) },
         { name: 'Plaster coats', value: Math.round(cost.plaster_cost || 1) }
       ]
     },
@@ -686,7 +662,7 @@ function EstimateContent() {
                             <p className="text-black/50 dark:text-white/40 uppercase font-black text-[9px] tracking-wider mb-2">Structural Rebar Specs</p>
                             <div className="flex justify-between items-center py-1">
                               <span>High-Ductility Fe550D TMT Bars (Tata Tiscon / JSW)</span>
-                              <span className="font-semibold text-black/70">{(materials?.steel_weight || 0).toLocaleString()} kg @ ₹{paramsState.rate_steel ?? 75}/kg</span>
+                              <span className="font-semibold text-black/70">{materials.steel_weight.toLocaleString()} kg @ ₹{paramsState.rate_steel ?? 75}/kg</span>
                             </div>
                             <div className="flex justify-between items-center py-1 text-[11px] text-black/40 dark:text-white/30 border-t border-black/[0.03]">
                               <span>Nominal Steel weight ratio</span>
@@ -706,7 +682,7 @@ function EstimateContent() {
                             {expandedTrees.masonry ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                             <span>Masonry Blocks & Bricks</span>
                           </div>
-                          <span className="font-black text-violet-500">{formatCurrency((cost?.brick_cost || 0) + (cost?.block_cost || 0))}</span>
+                          <span className="font-black text-violet-500">{formatCurrency(cost.brick_cost + cost.block_cost)}</span>
                         </div>
                         {expandedTrees.masonry && (
                           <div className="p-3.5 bg-black/[0.02] dark:bg-white/[0.02] border-t border-black/[0.04] space-y-2 text-[12px]">
@@ -714,12 +690,12 @@ function EstimateContent() {
                             {paramsState.brick_type === 'aac_block' ? (
                               <div className="flex justify-between items-center py-1">
                                 <span>AAC Blocks (600x200x200 mm)</span>
-                                <span className="font-semibold text-black/70">{(materials?.blocks_count || 0).toLocaleString()} pcs @ ₹{paramsState.rate_brick ?? 55}/pc</span>
+                                <span className="font-semibold text-black/70">{materials.blocks_count.toLocaleString()} pcs @ ₹{paramsState.rate_brick ?? 55}/pc</span>
                               </div>
                             ) : (
                               <div className="flex justify-between items-center py-1">
                                 <span>Burnt Red Clay Bricks</span>
-                                <span className="font-semibold text-black/70">{(materials?.bricks_count || 0).toLocaleString()} pcs @ ₹{paramsState.rate_brick ?? 10}/pc</span>
+                                <span className="font-semibold text-black/70">{materials.bricks_count.toLocaleString()} pcs @ ₹{paramsState.rate_brick ?? 10}/pc</span>
                               </div>
                             )}
                             <div className="flex justify-between items-center py-1 text-[11px] text-black/40 dark:text-white/30 border-t border-black/[0.03]">
@@ -1163,11 +1139,11 @@ function EstimateContent() {
                   <span>Material Load Weight</span>
                   <span className="font-bold">
                     {(
-                      (((materials?.bricks_count || 0) * 3.0) + ((materials?.blocks_count || 0) * 12)) +
-                      ((materials?.cement_bags || 0) * 50) +
-                      (materials?.steel_weight || 0) +
-                      ((materials?.sand_volume || 0) * 1600) +
-                      ((materials?.aggregate_volume || 0) * 1500)
+                      (((materials.bricks_count || 0) * 3.0) + ((materials.blocks_count || 0) * 12)) +
+                      (materials.cement_bags * 50) +
+                      (materials.steel_weight) +
+                      (materials.sand_volume * 1600) +
+                      (materials.aggregate_volume * 1500)
                     ).toLocaleString(undefined, { maximumFractionDigits: 0 })} kg
                   </span>
                 </div>
@@ -1175,17 +1151,17 @@ function EstimateContent() {
                   <span>Approx Truck Trips</span>
                   <span className="font-bold">
                     {Math.ceil(
-                      (((materials?.bricks_count || 0) * 3.0) + ((materials?.blocks_count || 0) * 12) +
-                      ((materials?.cement_bags || 0) * 50) +
-                      (materials?.steel_weight || 0) +
-                      ((materials?.sand_volume || 0) * 1600) +
-                      ((materials?.aggregate_volume || 0) * 1500)) / 8000
+                      (((materials.bricks_count || 0) * 3.0) + ((materials.blocks_count || 0) * 12) +
+                      (materials.cement_bags * 50) +
+                      (materials.steel_weight) +
+                      (materials.sand_volume * 1600) +
+                      (materials.aggregate_volume * 1500)) / 8000
                     )} trips (8-ton trucks)
                   </span>
                 </div>
                 <div className="flex justify-between items-center py-2 border-b border-black/[0.05] dark:border-white/[0.05]">
                   <span>Logistics Transport Charge</span>
-                  <span className="font-bold text-violet-500">₹{(cost?.transport_cost || 0).toLocaleString()}</span>
+                  <span className="font-bold text-violet-500">₹{cost.transport_cost.toLocaleString()}</span>
                 </div>
               </div>
             </div>
@@ -1429,17 +1405,5 @@ function EstimateContent() {
         </div>
       )}
     </div>
-  )
-}
-
-export default function EstimatePage() {
-  return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="w-8 h-8 animate-spin text-[#7C3AED]" />
-      </div>
-    }>
-      <EstimateContent />
-    </Suspense>
   )
 }

@@ -160,23 +160,6 @@ export default function AnalysisProgressPage() {
 
   // ── Start pipeline on mount ──────────────────────────────────────────────
   useEffect(() => {
-    const stored = localStorage.getItem(`bw_demo_plan_${planId}`)
-    if (stored) {
-      try {
-        const plan = JSON.parse(stored)
-        if (plan.status === 'done' && plan.detected_data && plan.detected_data.rooms?.length > 0) {
-          setSteps(PIPELINE_STEPS.map(s => ({ ...s, status: 'done' as const, progress: 100 })))
-          setAnalysisResult(plan.detected_data)
-          setTotalArea(plan.detected_data.total_area_sqft || 644)
-          setWallThickness(plan.detected_data.wall_thickness_m || 0.23)
-          setProjectId(plan.project_id || planId)
-          setPipelineStatus('done')
-          setShowWizard(true)
-          return
-        }
-      } catch { /* ignore */ }
-    }
-
     startPipeline()
     return () => { abortRef.current?.abort() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -237,16 +220,6 @@ export default function AnalysisProgressPage() {
           setTotalArea(Math.round(r.total_area_sqft) || 1500)
           setWallThickness(r.wall_thickness_m || 0.23)
           setProjectId(r.project_id)
-
-          const planObj = stored ? JSON.parse(stored) : {}
-          const updatedPlan = {
-            ...planObj,
-            id: planId,
-            project_id: r.project_id || plan.project_id || planId,
-            status: 'done',
-            detected_data: r,
-          }
-          localStorage.setItem(`bw_demo_plan_${planId}`, JSON.stringify(updatedPlan))
         }
         const hasError = updatedSteps.some(s => s.status === 'error')
         if (hasError) {
@@ -483,7 +456,7 @@ export default function AnalysisProgressPage() {
               <div>
                 <h2 className="text-lg font-black tracking-tight">Configure AI Engine</h2>
                 <p className="text-[12.5px] text-black/40 dark:text-white/35 mt-0.5">
-                  Enter your Vision AI API key to enable real AI floor plan analysis
+                  Enter your Gemini API key to enable real AI floor plan analysis
                 </p>
               </div>
             </div>
@@ -492,7 +465,7 @@ export default function AnalysisProgressPage() {
               <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
               <p className="text-[12px] text-blue-600 dark:text-blue-400">
                 Your key is stored locally in your browser and never sent to our servers.
-                Get a free key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="font-bold underline">AI Portal</a>.
+                Get a free key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="font-bold underline">Google AI Studio</a>.
               </p>
             </div>
 
@@ -558,7 +531,7 @@ export default function AnalysisProgressPage() {
               <div className="flex-1">
                 <h2 className="text-lg font-black tracking-tight">AI Architect Pipeline</h2>
                 <p className="text-[12.5px] text-black/40 dark:text-white/35 mt-0.5">
-                  Hybrid AI: BuildWise Vision AI · Computer Vision · Geometry Processing
+                  Hybrid AI: Gemini Vision · Computer Vision · Geometry Processing
                 </p>
               </div>
               <div className="text-right">

@@ -184,7 +184,7 @@ export async function callGeminiVision(
   wallThicknessHint: number,
   abortSignal?: AbortSignal
 ): Promise<string> {
-  const modelsToTry: string[] = Array.from(new Set([model, 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']))
+  const url = `${GEMINI_API_BASE}/models/${model}:generateContent?key=${apiKey}`
   const prompt = buildAnalysisPrompt(imageWidth, imageHeight, floorHeightHint, wallThicknessHint)
 
   const requestBody = {
@@ -204,7 +204,7 @@ export async function callGeminiVision(
       ]
     }],
     generation_config: {
-      temperature: 0.1,
+      temperature: 0.1,           // Low temperature for precision
       top_p: 0.8,
       max_output_tokens: 32768,
       response_mime_type: 'application/json',
@@ -217,39 +217,26 @@ export async function callGeminiVision(
     ]
   }
 
-  let lastError = ''
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requestBody),
+    signal: abortSignal,
+  })
 
-  for (const m of modelsToTry) {
-    try {
-      const url = `${GEMINI_API_BASE}/models/${m}:generateContent?key=${apiKey}`
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-        signal: abortSignal,
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text
-        if (text) return text
-      } else {
-        const errText = await response.text()
-        lastError = `Vision AI server high demand (${response.status}). Retrying...`
-        if (response.status === 503 || response.status === 429 || response.status === 500) {
-          console.warn(`Model ${m} returned ${response.status}, retrying with fallback model...`)
-          await new Promise(r => setTimeout(r, 800))
-          continue
-        }
-        throw new Error(lastError)
-      }
-    } catch (e: any) {
-      if (e.name === 'AbortError') throw e
-      lastError = e.message || 'Vision AI request failed'
-    }
+  if (!response.ok) {
+    const err = await response.text()
+    throw new Error(`Gemini API error ${response.status}: ${err}`)
   }
 
-  throw new Error('Vision AI server currently experiencing high demand. Please retry in a few moments.')
+  const data = await response.json()
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+
+  if (!text) {
+    throw new Error('Gemini returned no content. Check API key and model availability.')
+  }
+
+  return text
 }
 
 // ── Parse Gemini Response → Typed Structures ────────────────────────────────

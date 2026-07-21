@@ -190,25 +190,25 @@ export async function* runFloorPlanPipeline(
 
   if (geminiError) {
     const runningStep = steps.find(s => s.status === 'running')
-    if (runningStep) markError(runningStep.id, geminiError.message || 'Vision AI request failed')
+    if (runningStep) markError(runningStep.id, geminiError.message || 'AI request failed')
     yield [...steps]
     return
   }
 
   if (rawResponse === null) {
     const runningStep = steps.find(s => s.status === 'running')
-    if (runningStep) markError(runningStep.id, 'No response received from Vision AI engine')
+    if (runningStep) markError(runningStep.id, 'No response received from Gemini API')
     yield [...steps]
     return
   }
 
   const finalResponse: string = rawResponse
 
-  // Mark all vision steps as done
+  // Mark all gemini steps as done
   geminiStepIds.forEach(id => markDone(id))
   yield [...steps]
 
-  // ── Parse Vision AI Response ──────────────────────────────────────────────
+  // ── Parse Gemini Response ──────────────────────────────────────────────────
   let rawParsed
   try {
     rawParsed = parseGeminiResponse(finalResponse)
