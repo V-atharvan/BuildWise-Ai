@@ -6,7 +6,7 @@ import { OrbitControls, Text, Grid, PerspectiveCamera, Html, Billboard } from '@
 import * as THREE from 'three'
 import {
   Eye, EyeOff, Box, RotateCcw, DoorOpen, AppWindow,
-  Footprints,
+  Footprints, Columns
 } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -319,13 +319,13 @@ function CameraTweener({ target, preset, walkthroughMode }: {
 
 function Scene({
   rooms, doors, windows, columns = [], floorHeight, scaleFactor, selectedRoomId, selectedWallKey,
-  showWalls, showLabels, showDoors, showWindows, cameraPreset, walkthroughMode,
+  showWalls, showLabels, showDoors, showWindows, showColumns, cameraPreset, walkthroughMode,
   wallThickness, exploreMode, onRoomClick, onWallClick,
 }: {
   rooms: Room3D[]; doors: Door3D[]; windows: Window3D[]; columns: any[]
   floorHeight: number; scaleFactor: number
   selectedRoomId: string | null; selectedWallKey: string | null
-  showWalls: boolean; showLabels: boolean; showDoors: boolean; showWindows: boolean
+  showWalls: boolean; showLabels: boolean; showDoors: boolean; showWindows: boolean; showColumns: boolean
   cameraPreset: string; walkthroughMode: boolean; wallThickness: number
   exploreMode: 'normal' | 'wireframe' | 'transparent' | 'structural' | 'masonry'
   onRoomClick: (id: string) => void
@@ -333,20 +333,6 @@ function Scene({
 }) {
   const [hoveredRoom, setHoveredRoom] = useState<string | null>(null)
   const [cameraTarget, setCameraTarget] = useState<THREE.Vector3 | null>(null)
-
-  const transformedRooms = useMemo(() => {
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-    rooms.forEach(r => r.polygon?.forEach(([x, y]) => {
-      const sx = x * scaleFactor, sy = y * scaleFactor
-      if (sx < minX) minX = sx; if (sy < minY) minY = sy
-      if (sx > maxX) maxX = sx; if (sy > maxY) maxY = sy
-    }))
-    const cX = (minX + maxX) / 2, cY = (minY + maxY) / 2
-    return rooms.map(r => ({
-      ...r,
-      polygon: r.polygon?.map(([x, y]) => [x * scaleFactor - cX, y * scaleFactor - cY]) || [],
-    }))
-  }, [rooms, scaleFactor])
 
   const centerOffset = useMemo(() => {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
@@ -357,6 +343,13 @@ function Scene({
     }))
     return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }
   }, [rooms, scaleFactor])
+
+  const transformedRooms = useMemo(() => {
+    return rooms.map(r => ({
+      ...r,
+      polygon: r.polygon?.map(([x, y]) => [x * scaleFactor - centerOffset.x, y * scaleFactor - centerOffset.y]) || [],
+    }))
+  }, [rooms, scaleFactor, centerOffset])
 
   const handleDoubleClick = (room: any) => {
     const poly = room.polygon
@@ -413,8 +406,8 @@ function Scene({
         }} scaleFactor={1} floorHeight={floorHeight} />
       ))}
 
-      {/* Column structural markers */}
-      {!isMasonry && columns.map((col, idx) => (
+      {/* Column structural markers (Only rendered when showColumns is TRUE) */}
+      {showColumns && !isMasonry && columns.map((col, idx) => (
         <ColumnMarker key={col.id || idx} column={col} scaleFactor={scaleFactor} floorHeight={floorHeight} centerOffset={centerOffset} />
       ))}
 
@@ -427,13 +420,14 @@ function Scene({
 // ── Main Export ───────────────────────────────────────────────────────────────
 
 export function Building3DViewer({
-  rooms, doors = [], windows = [], columns = [], floorHeight = 3.0, scaleFactor = 0.015,
+  rooms, doors = [], windows = [], columns = [], floorHeight = 3.0, scaleFactor = 0.035,
   onRoomClick, onWallClick, selectedRoomId = null, selectedWallKey = null,
 }: Building3DViewerProps) {
   const [showLabels, setShowLabels] = useState(true)
   const [showWalls, setShowWalls] = useState(true)
   const [showDoors, setShowDoors] = useState(true)
   const [showWindows, setShowWindows] = useState(true)
+  const [showColumns, setShowColumns] = useState(false)
   const [walkthroughMode, setWalkthroughMode] = useState(false)
   const [cameraPreset, setCameraPreset] = useState<'perspective'|'top'|'front'|'side'|'walkthrough'>('perspective')
   
@@ -493,6 +487,7 @@ export function Building3DViewer({
         <button onClick={() => setShowLabels(!showLabels)} className={`p-1.5 rounded-lg transition-all ${showLabels ? 'bg-violet-500/20 text-violet-400' : 'text-white/40 hover:bg-white/[0.05]'}`} title="Toggle Labels">{showLabels ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}</button>
         <button onClick={() => setShowDoors(!showDoors)} className={`p-1.5 rounded-lg transition-all ${showDoors ? 'bg-gray-400/20 text-gray-300' : 'text-white/40 hover:bg-white/[0.05]'}`} title="Toggle Doors"><DoorOpen className="w-4 h-4" /></button>
         <button onClick={() => setShowWindows(!showWindows)} className={`p-1.5 rounded-lg transition-all ${showWindows ? 'bg-blue-500/20 text-blue-400' : 'text-white/40 hover:bg-white/[0.05]'}`} title="Toggle Windows"><AppWindow className="w-4 h-4" /></button>
+        <button onClick={() => setShowColumns(!showColumns)} className={`p-1.5 rounded-lg transition-all ${showColumns ? 'bg-amber-500/20 text-amber-400' : 'text-white/40 hover:bg-white/[0.05]'}`} title="Toggle Columns Mode"><Columns className="w-4 h-4" /></button>
       </div>
 
       {/* Room legend */}
@@ -525,7 +520,7 @@ export function Building3DViewer({
             floorHeight={floorHeight} scaleFactor={scaleFactor}
             selectedRoomId={selectedRoomId} selectedWallKey={selectedWallKey}
             showWalls={showWalls} showLabels={showLabels}
-            showDoors={showDoors} showWindows={showWindows}
+            showDoors={showDoors} showWindows={showWindows} showColumns={showColumns}
             cameraPreset={cameraPreset} walkthroughMode={walkthroughMode}
             wallThickness={wallThickness} exploreMode={exploreMode}
             onRoomClick={handleRoomClick}

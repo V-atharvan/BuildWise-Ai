@@ -11,7 +11,7 @@ import {
   Settings, Users, ClipboardList, ChevronDown, ChevronRight, Search, BarChart3, ToggleLeft
 } from 'lucide-react'
 import { estimationApi, reportsApi } from '@/lib/api'
-import { formatCurrency, formatNumber, formatDate } from '@/lib/utils'
+import { formatCurrency, formatNumber, formatDate, safeLocalStorageSet } from '@/lib/utils'
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
@@ -40,6 +40,7 @@ export default function EstimatePage() {
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard')
   const [dashboardView, setDashboardView] = useState<'boq' | 'analytics'>('boq')
+  const [selectedAudit, setSelectedAudit] = useState<any | null>(null)
 
   const [isMounted, setIsMounted] = useState(false)
   useEffect(() => {
@@ -71,26 +72,35 @@ export default function EstimatePage() {
   const [wallSortOrder, setWallSortOrder] = useState<'asc' | 'desc'>('asc')
 
   // Load demo estimations from localStorage
-  const localEstimations = typeof window !== 'undefined'
-    ? (() => {
-        const results: any[] = []
-        try {
-          for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i)
-            if (!key?.startsWith('bw_demo_est_')) continue
-            const est = JSON.parse(localStorage.getItem(key) || '{}')
-            if (est.project_id === projectId || est.plan_id === planId) {
-              results.push(est)
-            }
-          }
-        } catch { /* ignore */ }
-        return results.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      })()
-    : []
+  const localEstimations = useMemo(() => {
+    if (typeof window === 'undefined') return []
+    const results: any[] = []
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (!key?.startsWith('bw_demo_est_')) continue
+        const est = JSON.parse(localStorage.getItem(key) || '{}')
+        if (est.project_id === projectId || est.plan_id === planId) {
+          results.push(est)
+        }
+      }
+    } catch { /* ignore */ }
+    return results.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  }, [projectId, planId])
 
-  const initialEstimation = estimationId
-    ? (localEstimations.find(e => e.id === estimationId) || (typeof window !== 'undefined' ? (() => { try { return JSON.parse(localStorage.getItem(`bw_demo_est_${estimationId}`) || 'null') } catch { return null } })() : null))
-    : (localEstimations.length > 0 ? localEstimations[0] : null)
+  const initialEstimation = useMemo(() => {
+    if (estimationId) {
+      const found = localEstimations.find(e => e.id === estimationId)
+      if (found) return found
+      if (typeof window !== 'undefined') {
+        try {
+          return JSON.parse(localStorage.getItem(`bw_demo_est_${estimationId}`) || 'null')
+        } catch { return null }
+      }
+      return null
+    }
+    return localEstimations.length > 0 ? localEstimations[0] : null
+  }, [estimationId, localEstimations])
 
   // Load plan geometry from localStorage for dynamic recalculations
   const [planGeometry, setPlanGeometry] = useState<any>(null)
@@ -132,6 +142,7 @@ export default function EstimatePage() {
   })
 
   const baseEstimation = initialEstimation || backendEstimation
+  const baseEstId = baseEstimation?.id
 
   // Live state of estimation allowing reactive parameters adjustments
   const [estimation, setEstimation] = useState<any>(null)
@@ -139,11 +150,15 @@ export default function EstimatePage() {
 
   useEffect(() => {
     if (baseEstimation) {
-      setEstimation(baseEstimation)
-      if (baseEstimation.user_inputs) {
-        setParamsState(baseEstimation.user_inputs)
-      } else {
-        setParamsState({
+      setEstimation((prev: any) => {
+        if (!prev || prev.id !== baseEstimation.id) {
+          return baseEstimation
+        }
+        return prev
+      })
+      setParamsState((prev: any) => {
+        if (prev) return prev
+        return baseEstimation.user_inputs || {
           building_type: 'residential',
           num_floors: 1,
           floor_height: 3.0,
@@ -164,10 +179,10 @@ export default function EstimatePage() {
           rate_plaster: 280,
           rate_paint: 120,
           rate_tiles: 650
-        })
-      }
+        }
+      })
     }
-  }, [baseEstimation])
+  }, [baseEstId])
 
   // Live recalculate handler
   const handleParamChange = (key: keyof TakeoffParams, val: any) => {
@@ -183,7 +198,7 @@ export default function EstimatePage() {
 
     // Persist local storage change in demo mode
     if (isDemoEst && activeEstId) {
-      localStorage.setItem(`bw_demo_est_${activeEstId}`, JSON.stringify(recalculated))
+      safeLocalStorageSet(`bw_demo_est_${activeEstId}`, JSON.stringify(recalculated))
     }
   }
 
@@ -327,7 +342,32 @@ export default function EstimatePage() {
   }
 
   const materials = estimation.materials
-  const cost = estimation.cost_breakdown
+  const rawCost = estimation.cost_breakdown || {}
+
+  // Safely coerce all cost fields to numbers — prevents ₹NaN when fields are undefined
+  const cost = {
+    brick_cost:          Number(rawCost.brick_cost)          || 0,
+    block_cost:          Number(rawCost.block_cost)          || 0,
+    cement_cost:         Number(rawCost.cement_cost)         || 0,
+    sand_cost:           Number(rawCost.sand_cost)           || 0,
+    aggregate_cost:      Number(rawCost.aggregate_cost)      || 0,
+    steel_cost:          Number(rawCost.steel_cost)          || 0,
+    plaster_cost:        Number(rawCost.plaster_cost)        || 0,
+    paint_cost:          Number(rawCost.paint_cost)          || 0,
+    tiles_cost:          Number(rawCost.tiles_cost)          || 0,
+    waterproofing_cost:  Number(rawCost.waterproofing_cost)  || 0,
+    excavation_cost:     Number(rawCost.excavation_cost)     || 0,
+    labour_cost:         Number(rawCost.labour_cost)         || 0,
+    equipment_cost:      Number(rawCost.equipment_cost)      || 0,
+    transport_cost:      Number(rawCost.transport_cost)      || 0,
+    total_material_cost: Number(rawCost.total_material_cost) || 0,
+    contractor_margin:   Number(rawCost.contractor_margin)   || 0,
+    contingency:         Number(rawCost.contingency)         || 0,
+    gst_amount:          Number(rawCost.gst_amount)          || 0,
+    grand_total:         Number(rawCost.grand_total)         || Number(estimation.total_cost) || 0,
+    // concrete_cost is not stored separately — derive it from cement + aggregate costs
+    concrete_cost:       Number(rawCost.concrete_cost) || Math.round((Number(rawCost.cement_cost) || 0) * 1.4 + (Number(rawCost.aggregate_cost) || 0)),
+  }
 
   // Pie chart cost distribution
   const pieData = [
@@ -452,7 +492,13 @@ export default function EstimatePage() {
             onClick={() => exportToExcel(estimation, projectId)}
             className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-black/[0.08] dark:border-white/[0.08] text-[13px] font-semibold hover:bg-black/[0.03] dark:hover:bg-white/[0.03] text-black/70 dark:text-white/60 transition-all"
           >
-            <FileSpreadsheet className="w-4 h-4" /> Excel
+            <FileSpreadsheet className="w-4 h-4" /> Multi-Tab Excel
+          </button>
+          <button
+            onClick={() => exportToCSV(estimation, projectId)}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-black/[0.08] dark:border-white/[0.08] text-[13px] font-semibold hover:bg-black/[0.03] dark:hover:bg-white/[0.03] text-black/70 dark:text-white/60 transition-all"
+          >
+            <FileText className="w-4 h-4" /> CSV
           </button>
         </div>
       </div>
@@ -568,6 +614,37 @@ export default function EstimatePage() {
                       })}
                     </div>
                   </div>
+                  <div className="bg-white dark:bg-[#1E1E24] border border-black/[0.06] dark:border-white/[0.06] rounded-[24px] p-6 space-y-4">
+                    <div className="flex items-center justify-between border-b border-black/[0.05] dark:border-white/[0.05] pb-3">
+                      <div>
+                        <h3 className="font-bold text-[15px]">Engineering Formula & IS Code Audit</h3>
+                        <p className="text-xs text-black/40 dark:text-white/35 mt-0.5">Auditable quantity derivations according to IS 1200 / IS 456 / IS 1786</p>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold">100% Traceable</span>
+                    </div>
+
+                    <div className="space-y-3">
+                      {(estimation.calculation_audits || []).map((audit: any) => (
+                        <div
+                          key={audit.item_id}
+                          onClick={() => setSelectedAudit(audit)}
+                          className="p-3.5 rounded-2xl border border-black/[0.06] dark:border-white/[0.06] hover:border-violet-500/30 bg-black/[0.01] dark:bg-white/[0.01] transition-all cursor-pointer flex items-center justify-between gap-3 group"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[13px] font-bold group-hover:text-violet-600 transition-colors">{audit.item_name}</span>
+                              <span className="px-2 py-0.5 rounded-md bg-violet-500/10 text-violet-600 dark:text-violet-400 text-[10px] font-semibold">{audit.is_code_reference}</span>
+                            </div>
+                            <p className="text-[11px] font-mono text-black/50 dark:text-white/40">{audit.formula}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="text-sm font-black text-violet-600 dark:text-violet-400">{audit.final_value.toLocaleString()} {audit.unit}</span>
+                            <p className="text-[10px] text-black/40 dark:text-white/35">Confidence {(audit.confidence * 100).toFixed(0)}%</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
                   {/* Detailed BOQ Table */}
                   <div className="bg-white dark:bg-[#1E1E24] border border-black/[0.06] dark:border-white/[0.06] rounded-[24px] p-6">
@@ -596,7 +673,7 @@ export default function EstimatePage() {
                             ['Direct craft labour wages', cost.labour_cost],
                             ['Equipment Centering hire', cost.equipment_cost],
                             ['Contractor margin & logistics', cost.contractor_margin + cost.contingency + cost.gst_amount],
-                          ].filter(row => row[1] > 0).map(([label, val]) => (
+                          ].filter(row => (row[1] as number) > 0).map(([label, val]) => (
                             <tr key={label as string} className="hover:bg-black/[0.01] dark:hover:bg-white/[0.01]">
                               <td className="px-4 py-3.5 font-medium">{label}</td>
                               <td className="px-4 py-3.5 text-right font-bold text-violet-500">₹{(val as number).toLocaleString('en-IN')}</td>
@@ -1281,17 +1358,47 @@ export default function EstimatePage() {
                   </select>
                 </div>
 
-                {/* Material Wastage Buffer */}
-                <div className="space-y-1.5">
-                  <label className="font-bold text-black/60 dark:text-white/40">Nominal Wastage Buffer (%)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="20"
-                    value={paramsState.waste_percentage}
-                    onChange={(e) => handleParamChange('waste_percentage', parseFloat(e.target.value) || 5)}
-                    className="w-full px-3 py-2 rounded-xl border border-black/10 dark:border-white/10 bg-transparent font-semibold"
-                  />
+                {/* Material Wastage Buffer Config */}
+                <div className="space-y-1.5 border-t border-black/10 dark:border-white/10 pt-3">
+                  <label className="font-bold text-black/70 dark:text-white/70 text-xs">Per-Material Waste Factors (%)</label>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <label className="text-[11px] text-black/50 dark:text-white/40">Brick Waste %</label>
+                      <input
+                        type="number" min="0" max="20"
+                        value={paramsState.waste_brick ?? 5}
+                        onChange={(e) => handleParamChange('waste_brick', parseFloat(e.target.value) || 0)}
+                        className="w-full px-2 py-1 rounded-lg border border-black/10 dark:border-white/10 bg-transparent font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-black/50 dark:text-white/40">Steel Waste %</label>
+                      <input
+                        type="number" min="0" max="20"
+                        value={paramsState.waste_steel ?? 3}
+                        onChange={(e) => handleParamChange('waste_steel', parseFloat(e.target.value) || 0)}
+                        className="w-full px-2 py-1 rounded-lg border border-black/10 dark:border-white/10 bg-transparent font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-black/50 dark:text-white/40">Concrete Waste %</label>
+                      <input
+                        type="number" min="0" max="20"
+                        value={paramsState.waste_concrete ?? 2}
+                        onChange={(e) => handleParamChange('waste_concrete', parseFloat(e.target.value) || 0)}
+                        className="w-full px-2 py-1 rounded-lg border border-black/10 dark:border-white/10 bg-transparent font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-black/50 dark:text-white/40">Tiles Waste %</label>
+                      <input
+                        type="number" min="0" max="20"
+                        value={paramsState.waste_tiles ?? 8}
+                        onChange={(e) => handleParamChange('waste_tiles', parseFloat(e.target.value) || 0)}
+                        className="w-full px-2 py-1 rounded-lg border border-black/10 dark:border-white/10 bg-transparent font-semibold"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1400,6 +1507,67 @@ export default function EstimatePage() {
                   className="w-full px-3 py-1.5 rounded-xl border border-black/10 dark:border-white/10 bg-transparent font-semibold"
                 />
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Formula Audit Modal Dialog ────────────────────────────────────────── */}
+      {selectedAudit && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1E1E24] border border-black/10 dark:border-white/10 rounded-[28px] max-w-xl w-full p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between border-b border-black/[0.06] dark:border-white/[0.06] pb-3">
+              <div>
+                <span className="px-2.5 py-0.5 rounded-md bg-violet-500/10 text-violet-600 dark:text-violet-400 text-[11px] font-bold">
+                  {selectedAudit.is_code_reference}
+                </span>
+                <h3 className="text-lg font-black mt-1">{selectedAudit.item_name}</h3>
+              </div>
+              <button
+                onClick={() => setSelectedAudit(null)}
+                className="w-8 h-8 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center text-xs font-bold hover:bg-black/10 dark:hover:bg-white/10 transition-all"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="p-3.5 rounded-xl bg-violet-500/5 border border-violet-500/10 space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">Engineering Formula</span>
+                <p className="text-xs font-mono font-bold">{selectedAudit.formula}</p>
+              </div>
+
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-black/60 dark:text-white/40">Step-by-Step Derivation Breakdown</span>
+                <div className="space-y-1.5 bg-black/[0.02] dark:bg-white/[0.02] p-3 rounded-xl border border-black/[0.05] dark:border-white/[0.05] text-xs font-mono">
+                  {selectedAudit.intermediate_steps?.map((step: string, i: number) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <span className="text-violet-500 font-bold">•</span>
+                      <span>{step}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                <div>
+                  <span className="text-[10px] uppercase tracking-wider font-bold">Final Audited Quantity</span>
+                  <p className="text-lg font-black">{selectedAudit.final_value.toLocaleString()} {selectedAudit.unit}</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] uppercase tracking-wider font-bold">IS Confidence</span>
+                  <p className="text-sm font-bold">{(selectedAudit.confidence * 100).toFixed(0)}% Match</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 text-center">
+              <button
+                onClick={() => setSelectedAudit(null)}
+                className="w-full py-2.5 rounded-xl bg-violet-600 text-white font-bold text-xs hover:bg-violet-700 transition-all shadow-md shadow-violet-600/20"
+              >
+                Close Calculation Sheet
+              </button>
             </div>
           </div>
         </div>

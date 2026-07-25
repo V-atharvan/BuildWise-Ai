@@ -1,21 +1,23 @@
 'use client'
 
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Loader2, CheckCircle2, AlertCircle, Sparkles, Settings, Calculator,
   Eye, EyeOff, KeyRound, RefreshCw, ChevronRight, Building2,
-  Ruler, Layers, DoorOpen, LayoutDashboard, Zap, Info,
+  Ruler, Layers, DoorOpen, LayoutDashboard, Zap, Info, Cpu,
 } from 'lucide-react'
 import {
   BUILDING_TYPES, CONCRETE_GRADES, STEEL_GRADES, FOUNDATION_TYPES, ROOF_TYPES, BRICK_TYPES
 } from '@/lib/utils'
+import { getPlanImageDataUrl } from '@/lib/floor-plan-ai/image-cache'
 import { estimationApi } from '@/lib/api'
 import { runFloorPlanPipeline, runDemoPipeline, PIPELINE_STEPS } from '@/lib/floor-plan-ai/pipeline'
-import { getGeminiApiKey, setGeminiApiKey, validateGeminiKey } from '@/lib/floor-plan-ai/gemini-analyzer'
 import type { PipelineStep, FloorPlanAnalysisResult } from '@/lib/floor-plan-ai/types'
 import { calculateTakeoff } from '@/lib/estimation-engine'
+import { validateFloorPlanGeometry } from '@/lib/floor-plan-ai/validation-engine'
+import { calculateProjectConfidence } from '@/lib/floor-plan-ai/confidence-engine'
 
 // ── Step icon mapping ────────────────────────────────────────────────────────
 const STEP_ICONS: Record<string, React.ReactNode> = {
@@ -100,7 +102,19 @@ function runDemoCalculation(params: Record<string, any>, projectId: string, rout
     waste_percentage: parseFloat(params.waste_percentage || 5)
   })
 
-  localStorage.setItem(`bw_demo_est_${result.id}`, JSON.stringify(result))
+  try {
+    // Clear old estimation results to free up quota before saving
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith('bw_demo_est_') && key !== `bw_demo_est_${result.id}`) {
+        localStorage.removeItem(key)
+      }
+    }
+    localStorage.setItem(`bw_demo_est_${result.id}`, JSON.stringify(result))
+  } catch (e) {
+    // QuotaExceededError: storage is full — estimation still navigates normally
+    console.warn('localStorage quota exceeded; estimation saved to memory only.', e)
+  }
   router.push(`/estimate/${projectId}?estimation_id=${result.id}`)
 }
 
@@ -111,6 +125,8 @@ function runDemoCalculation(params: Record<string, any>, projectId: string, rout
 export default function AnalysisProgressPage() {
   const { id: planId } = useParams() as { id: string }
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const queryProjectId = searchParams.get('project_id') || ''
 
   // ── Pipeline state ────────────────────────────────────────────────────────
   const [steps, setSteps] = useState<PipelineStep[]>(() =>
@@ -120,16 +136,9 @@ export default function AnalysisProgressPage() {
   const [pipelineError, setPipelineError] = useState('')
   const [analysisResult, setAnalysisResult] = useState<FloorPlanAnalysisResult | null>(null)
 
-  // ── API Key UI ────────────────────────────────────────────────────────────
-  const [apiKeyInput, setApiKeyInput] = useState('')
-  const [showApiKeyInput, setShowApiKeyInput] = useState(false)
-  const [apiKeyValid, setApiKeyValid] = useState<boolean | null>(null)
-  const [testingKey, setTestingKey] = useState(false)
-  const [showKey, setShowKey] = useState(false)
-
   // ── Wizard state ──────────────────────────────────────────────────────────
   const [showWizard, setShowWizard] = useState(false)
-  const [projectId, setProjectId] = useState('')
+  const [projectId, setProjectId] = useState(queryProjectId)
   const [buildingType, setBuildingType] = useState('house')
   const [numFloors, setNumFloors] = useState(1)
   const [floorHeight, setFloorHeight] = useState(3.0)
@@ -148,15 +157,20 @@ export default function AnalysisProgressPage() {
 
   // ── Load project info ────────────────────────────────────────────────────
   useEffect(() => {
-    const stored = localStorage.getItem(`bw_demo_plan_${planId}`)
-    if (stored) {
-      const plan = JSON.parse(stored)
-      setProjectId(plan.project_id || planId)
-      if (plan.detected_data?.total_area_sqft) {
-        setTotalArea(plan.detected_data.total_area_sqft)
+    const loadInfo = async () => {
+      const { getPlanRecord } = await import('@/lib/floor-plan-ai/image-cache')
+      const plan = await getPlanRecord(planId)
+      if (plan) {
+        if (plan.project_id) setProjectId(plan.project_id)
+        if (plan.detected_data?.total_area_sqft) {
+          setTotalArea(plan.detected_data.total_area_sqft)
+        }
+      } else if (queryProjectId) {
+        setProjectId(queryProjectId)
       }
     }
-  }, [planId])
+    loadInfo()
+  }, [planId, queryProjectId])
 
   // ── Start pipeline on mount ──────────────────────────────────────────────
   useEffect(() => {
@@ -170,20 +184,10 @@ export default function AnalysisProgressPage() {
     setPipelineError('')
     setShowWizard(false)
 
-    const apiKey = getGeminiApiKey()
-
-    if (!apiKey) {
-      setShowApiKeyInput(true)
-      setPipelineStatus('idle')
-      return
-    }
-
-    // Get file from localStorage
-    const fileDataUrl = localStorage.getItem(`bw_demo_file_data_${planId}`)
-    if (!fileDataUrl && !isDemoPlan) {
-      // Try demo pipeline
-      await runDemoMode()
-      return
+    // Get file from IndexedDB / Memory / window fallback
+    let fileDataUrl = await getPlanImageDataUrl(planId)
+    if (!fileDataUrl && typeof window !== 'undefined') {
+      fileDataUrl = (window as any).__BW_LAST_UPLOADED_IMAGE__ || null
     }
 
     if (!fileDataUrl) {
@@ -195,16 +199,16 @@ export default function AnalysisProgressPage() {
     const file = await dataURLtoFile(fileDataUrl, planId)
 
     abortRef.current = new AbortController()
-    const stored = localStorage.getItem(`bw_demo_plan_${planId}`)
-    const plan = stored ? JSON.parse(stored) : {}
+    const { getPlanRecord } = await import('@/lib/floor-plan-ai/image-cache')
+    const storedRecord = await getPlanRecord(planId)
+    const activeProjId = queryProjectId || projectId || storedRecord?.project_id || planId
 
-    const savedModel = (localStorage.getItem('bw_gemini_model') as any) || 'gemini-3.5-flash'
+    setProjectId(activeProjId)
 
     const gen = runFloorPlanPipeline(file, {
       plan_id: planId,
-      project_id: plan.project_id || planId,
-      gemini_api_key: apiKey,
-      gemini_model: savedModel,
+      project_id: activeProjId,
+      use_local_engine: false,
       floor_height_m: 3.0,
       wall_thickness_m: 0.23,
       abort_signal: abortRef.current.signal,
@@ -219,7 +223,7 @@ export default function AnalysisProgressPage() {
           setAnalysisResult(r)
           setTotalArea(Math.round(r.total_area_sqft) || 1500)
           setWallThickness(r.wall_thickness_m || 0.23)
-          setProjectId(r.project_id)
+          if (r.project_id) setProjectId(r.project_id)
         }
         const hasError = updatedSteps.some(s => s.status === 'error')
         if (hasError) {
@@ -236,7 +240,7 @@ export default function AnalysisProgressPage() {
       setPipelineError(err.message || 'Pipeline failed unexpectedly')
       setPipelineStatus('error')
     }
-  }, [planId, isDemoPlan])
+  }, [planId, projectId, queryProjectId])
 
   const runDemoMode = async () => {
     const gen = runDemoPipeline(planId, projectId || planId)
@@ -389,7 +393,28 @@ export default function AnalysisProgressPage() {
       }
     }
 
-    localStorage.setItem(`bw_demo_plan_${planId}`, JSON.stringify(mockPlan))
+    try {
+      // Clear old demo plans to free quota
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i)
+        if (key && key.startsWith('bw_demo_plan_') && key !== `bw_demo_plan_${planId}`) {
+          localStorage.removeItem(key)
+        }
+      }
+      localStorage.setItem(`bw_demo_plan_${planId}`, JSON.stringify(mockPlan))
+    } catch (quotaErr) {
+      console.warn('localStorage quota exceeded in demo mode, clearing all plans and retrying...')
+      // Nuclear option: clear ALL bw_ keys
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i)
+        if (key && key.startsWith('bw_demo_plan_')) localStorage.removeItem(key)
+      }
+      try {
+        localStorage.setItem(`bw_demo_plan_${planId}`, JSON.stringify(mockPlan))
+      } catch {
+        console.warn('Cannot save to localStorage even after cleanup.')
+      }
+    }
 
     setAnalysisResult(mockPlan.detected_data as any)
     setTotalArea(644)
@@ -398,19 +423,6 @@ export default function AnalysisProgressPage() {
 
     setPipelineStatus('done')
     setShowWizard(true)
-  }
-
-  const handleApiKeySubmit = async () => {
-    if (!apiKeyInput.trim()) return
-    setTestingKey(true)
-    const valid = await validateGeminiKey(apiKeyInput.trim())
-    setApiKeyValid(valid)
-    setTestingKey(false)
-    if (valid) {
-      setGeminiApiKey(apiKeyInput.trim())
-      setShowApiKeyInput(false)
-      await startPipeline()
-    }
   }
 
   const handleWizardSubmit = async (e: React.FormEvent) => {
@@ -440,79 +452,8 @@ export default function AnalysisProgressPage() {
     <div className="max-w-[700px] mx-auto space-y-5">
       <AnimatePresence mode="wait">
 
-        {/* ── API Key Setup Screen ── */}
-        {showApiKeyInput && (
-          <motion.div
-            key="api-key"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -16 }}
-            className="bg-white dark:bg-[#1E1E24] border border-black/[0.06] dark:border-white/[0.06] rounded-[24px] p-6 space-y-5"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 bg-violet-500/10 rounded-2xl flex items-center justify-center">
-                <KeyRound className="w-5 h-5 text-violet-500" />
-              </div>
-              <div>
-                <h2 className="text-lg font-black tracking-tight">Configure AI Engine</h2>
-                <p className="text-[12.5px] text-black/40 dark:text-white/35 mt-0.5">
-                  Enter your Gemini API key to enable real AI floor plan analysis
-                </p>
-              </div>
-            </div>
-
-            <div className="p-4 bg-blue-500/5 border border-blue-500/15 rounded-2xl flex gap-3">
-              <Info className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
-              <p className="text-[12px] text-blue-600 dark:text-blue-400">
-                Your key is stored locally in your browser and never sent to our servers.
-                Get a free key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="font-bold underline">Google AI Studio</a>.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="relative">
-                <input
-                  type={showKey ? 'text' : 'password'}
-                  placeholder="AIzaSy..."
-                  value={apiKeyInput}
-                  onChange={e => { setApiKeyInput(e.target.value); setApiKeyValid(null) }}
-                  className="w-full px-4 py-3 pr-10 rounded-2xl border border-black/[0.1] dark:border-white/[0.1] bg-transparent text-[13.5px] font-mono focus:outline-none focus:ring-2 focus:ring-violet-500/30"
-                  onKeyDown={e => { if (e.key === 'Enter') handleApiKeySubmit() }}
-                />
-                <button
-                  onClick={() => setShowKey(!showKey)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-black/30 dark:text-white/30 hover:text-black/60 dark:hover:text-white/60"
-                >
-                  {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              {apiKeyValid === false && (
-                <p className="text-[12px] text-red-500 flex items-center gap-1.5">
-                  <AlertCircle className="w-3.5 h-3.5" /> Invalid API key. Please check and try again.
-                </p>
-              )}
-              <div className="flex gap-2">
-                <button
-                  onClick={handleApiKeySubmit}
-                  disabled={testingKey || !apiKeyInput.trim()}
-                  className="flex-1 py-3 rounded-2xl bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-[13.5px] font-semibold transition-all flex items-center justify-center gap-2 shadow-lg shadow-violet-600/20"
-                >
-                  {testingKey ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                  {testingKey ? 'Testing...' : 'Start AI Analysis'}
-                </button>
-                <button
-                  onClick={runDemoMode}
-                  className="px-4 py-3 rounded-2xl border border-black/[0.08] dark:border-white/[0.08] text-[13px] font-semibold hover:bg-black/[0.03] dark:hover:bg-white/[0.03] transition-all"
-                >
-                  Demo Mode
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
         {/* ── Pipeline Progress Screen ── */}
-        {!showApiKeyInput && !showWizard && (
+        {!showWizard && (
           <motion.div
             key="pipeline"
             initial={{ opacity: 0, y: 16 }}
@@ -531,7 +472,7 @@ export default function AnalysisProgressPage() {
               <div className="flex-1">
                 <h2 className="text-lg font-black tracking-tight">AI Architect Pipeline</h2>
                 <p className="text-[12.5px] text-black/40 dark:text-white/35 mt-0.5">
-                  Hybrid AI: Gemini Vision · Computer Vision · Geometry Processing
+                  Hybrid AI: Computer Vision · Geometry Processing · Polygon Solver
                 </p>
               </div>
               <div className="text-right">
@@ -613,18 +554,12 @@ export default function AnalysisProgressPage() {
                 <div className="flex-1">
                   <p className="text-[13px] font-bold text-red-500">Analysis Failed</p>
                   <p className="text-[12px] text-red-400 mt-0.5 leading-relaxed break-words">{pipelineError}</p>
-                  <div className="flex items-center gap-3 mt-3">
+                  <div className="flex flex-wrap items-center gap-2 mt-3">
                     <button
-                      onClick={startPipeline}
+                      onClick={() => startPipeline()}
                       className="text-[12px] text-violet-600 dark:text-violet-400 font-bold hover:underline flex items-center gap-1 bg-violet-500/10 px-3 py-1.5 rounded-xl border border-violet-500/10"
                     >
-                      <RefreshCw className="w-3 h-3" /> Retry API Analysis
-                    </button>
-                    <button
-                      onClick={runDemoMode}
-                      className="text-[12px] text-emerald-600 dark:text-emerald-400 font-bold hover:underline flex items-center gap-1 bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/10"
-                    >
-                      Use Demo/Simulation Mode
+                      <RefreshCw className="w-3 h-3" /> Retry Analysis
                     </button>
                   </div>
                 </div>
@@ -653,30 +588,59 @@ export default function AnalysisProgressPage() {
               </div>
             </div>
 
-            {/* AI Detection Summary */}
+            {/* AI Detection Summary & Engineering Validation Dashboard */}
             {analysisResult && (
-              <div className="px-4 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[12.5px]">
-                <div className="flex items-center gap-2 font-bold mb-1">
-                  <Sparkles className="w-3.5 h-3.5" /> AI Detected from Your Plan
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
-                  {[
-                    { label: 'Rooms', value: analysisResult.room_count },
-                    { label: 'Doors', value: analysisResult.door_count },
-                    { label: 'Windows', value: analysisResult.window_count },
-                    { label: 'Area', value: `${Math.round(analysisResult.total_area_sqft).toLocaleString()} sqft` },
-                  ].map(item => (
-                    <div key={item.label} className="bg-white/50 dark:bg-white/5 rounded-xl p-2 text-center">
-                      <p className="text-[11px] opacity-70">{item.label}</p>
-                      <p className="font-black text-[15px]">{item.value}</p>
+              <div className="space-y-3">
+                <div className="px-4 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[12.5px]">
+                  <div className="flex items-center justify-between font-bold mb-1">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-3.5 h-3.5" /> AI Detected from Your Plan
                     </div>
-                  ))}
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-[11px] font-extrabold">
+                      {(calculateProjectConfidence(analysisResult).overall_confidence * 100).toFixed(0)}% Health Score
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
+                    {[
+                      { label: 'Rooms', value: analysisResult.room_count },
+                      { label: 'Doors', value: analysisResult.door_count },
+                      { label: 'Windows', value: analysisResult.window_count },
+                      { label: 'Area', value: `${Math.round(analysisResult.total_area_sqft).toLocaleString()} sqft` },
+                    ].map(item => (
+                      <div key={item.label} className="bg-white/50 dark:bg-white/5 rounded-xl p-2 text-center">
+                        <p className="text-[11px] opacity-70">{item.label}</p>
+                        <p className="font-black text-[15px]">{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                {analysisResult.low_confidence_room_ids.length > 0 && (
-                  <p className="mt-2 text-[11.5px] text-amber-600 dark:text-amber-400">
-                    ⚠ {analysisResult.low_confidence_room_ids.length} rooms have low confidence — review them on the Floor Plans tab.
-                  </p>
-                )}
+
+                {/* Validation & Confidence Report */}
+                {(() => {
+                  const valReport = validateFloorPlanGeometry(analysisResult)
+                  const confReport = calculateProjectConfidence(analysisResult)
+                  return (
+                    <div className="p-4 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.06] dark:border-white/[0.06] space-y-3 text-xs">
+                      <div className="flex items-center justify-between border-b border-black/[0.05] dark:border-white/[0.05] pb-2">
+                        <span className="font-bold text-black/70 dark:text-white/70">Engineering Quality & Validation Report</span>
+                        <div className="flex gap-1.5">
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-[10px]">{valReport.critical_count} Critical</span>
+                          <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold text-[10px]">{valReport.major_count} Major</span>
+                          <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold text-[10px]">{valReport.minor_count} Minor</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        {confReport.breakdown.map((item) => (
+                          <div key={item.category} className="p-2 rounded-xl bg-white dark:bg-[#18181C] border border-black/[0.04] dark:border-white/[0.04] flex items-center justify-between">
+                            <span className="text-[11px] font-medium text-black/60 dark:text-white/40">{item.category}</span>
+                            <span className="font-bold text-violet-500 text-[11px]">{item.score}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
             )}
 

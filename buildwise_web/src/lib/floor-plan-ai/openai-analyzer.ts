@@ -1,23 +1,19 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // BuildWise AI — Floor Plan Understanding Engine
-// Google Gemini 2.0 Flash Vision API Integration
+// OpenAI GPT-4o Vision API Integration
 // ══════════════════════════════════════════════════════════════════════════════
 
 import type { FloorPlanAnalysisResult, AIRoom, AIWall, AIDoor, AIWindow, AIColumn } from './types'
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent'
+const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
 
-const DEFAULT_GEMINI_KEY = ''
+const DEFAULT_OPENAI_KEY = ''
 
-function getActualKey(): string {
-  return ''
-}
-
-export function getGeminiApiKey(): string {
-  if (typeof window === 'undefined') {
-    return process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
-  }
-  return process.env.NEXT_PUBLIC_GEMINI_API_KEY || localStorage.getItem('bw_gemini_key') || ''
+export function getOpenAIApiKey(): string {
+  if (typeof window === 'undefined') return process.env.NEXT_PUBLIC_OPENAI_API_KEY || ''
+  return process.env.NEXT_PUBLIC_OPENAI_API_KEY ||
+    localStorage.getItem('bw_openai_key') ||
+    ''
 }
 
 const SYSTEM_PROMPT = `You are a Senior Principal Computer Vision Engineer, BIM Specialist, and Architectural Plan Analyst.
@@ -26,28 +22,29 @@ Your task is to analyze the uploaded 2D architectural floor plan blueprint image
 Extract ALL architectural structures into a single valid JSON object.
 
 CRITICAL INSTRUCTIONS:
-1. READ ALL TEXT LABELS ON THE BLUEPRINT: Look closely at room titles printed on the floor plan (e.g., "Kitchen", "Living Room", "Master Bedroom", "Bedroom 2", "Bathroom", "Sauna", "Laundry", "Utility Closet", "WC", "Entry", "Hallway", "Drawing Room", "Stairs", "Pooja Room", "Store").
+1. READ ALL TEXT LABELS ON THE BLUEPRINT: Look closely at room titles printed on the floor plan (e.g., "Drawing Room", "Kitchen cum Dinning", "Bedroom", "Bathroom & Toilet", "Stairs", "Living Room", "Master Bedroom", "W.C", "Laundry", "Store").
 2. EXTRACT EXACT ROOM BOUNDARIES (0-1000 Grid):
-   - Trace EVERY SINGLE enclosed room space (Kitchen, Living Room, Master Bedroom, Bedroom 2, Bathroom, Sauna, Laundry, Utility Closet, WC, Entry, Hallway). Do NOT skip small rooms or corridors!
-3. EXTRACT ALL DOORS AND WINDOWS:
-   - Identify EVERY door opening / quarter-circle door swing arc in the drawing (both interior doors and exterior entrance doors). There are usually 8-12+ doors in detailed plans.
-   - Identify EVERY window along exterior and interior walls. There are usually 10-15+ windows in detailed plans.
-   - List each door with "id", "center_normalized" [x,y], "width_m", and "room_id".
-   - List each window with "id", "center_normalized" [x,y], "width_m", and "room_id".
-4. EXTRACT WALL SEGMENTS:
-   - List all exterior perimeter walls and interior partition walls with "start_normalized" [x,y] and "end_normalized" [x,y] on the 0-1000 grid.
+   - Provide an ordered array of 2D vertex points [[x1, y1], [x2, y2], [x3, y3], [x4, y4]] for EVERY room's outer walls.
+   - Coordinates MUST be normalized to a 0-1000 integer grid (where [0,0] is top-left corner of the image canvas, and [1000,1000] is bottom-right corner).
+   - Ensure room polygons line up tightly along shared interior wall dividers.
+3. READ DIMENSIONS AND SCALE:
+   - Read dimension strings (e.g., "41'", "26'", "3.52m", "13.16m") from top, bottom, left, or right dimension lines.
+   - Convert imperial feet (') to meters if necessary (1 ft = 0.3048 m).
+4. EXTRACT WALLS, DOORS, AND WINDOWS:
+   - List external and internal wall segments with "start_normalized" [x,y] and "end_normalized" [x,y] on the 0-1000 grid.
+   - List doors and windows with "center_normalized" [x,y] location.
 
 Return ONLY valid JSON matching this schema:
 {
   "drawing_type": "architectural",
-  "detected_scale_text": "5.82m x 12.5m",
+  "detected_scale_text": "41' x 26'",
   "px_per_meter_estimate": 50,
   "rooms": [
     {
       "id": "r1",
-      "label": "Kitchen",
+      "label": "Kitchen cum Dinning",
       "room_type": "kitchen",
-      "polygon_normalized": [[100, 80], [360, 80], [360, 420], [100, 420]],
+      "polygon_normalized": [[360, 80], [610, 80], [610, 420], [360, 420]],
       "area_m2": 18.5
     }
   ],
@@ -68,104 +65,71 @@ Return ONLY valid JSON matching this schema:
   ]
 }`
 
-export async function analyzeFloorPlanWithGemini(
+export async function analyzeFloorPlanWithOpenAI(
   imageBase64: string,
   imgWidth: number,
   imgHeight: number,
   apiKey?: string,
   abortSignal?: AbortSignal
 ): Promise<Partial<FloorPlanAnalysisResult>> {
-  const key = apiKey || getGeminiApiKey()
+  const key = apiKey || getOpenAIApiKey()
   if (!key) {
-    throw new Error('Google Gemini API key is missing. Please add NEXT_PUBLIC_GEMINI_API_KEY in .env.local')
+    throw new Error('OpenAI API key is missing. Please add OPENAI_API_KEY in .env.local')
   }
 
-  // Extract pure base64 data and mime type
-  let base64Data = imageBase64
-  let mimeType = 'image/png'
-  if (imageBase64.startsWith('data:')) {
-    const match = imageBase64.match(/^data:(image\/\w+);base64,(.+)$/)
-    if (match) {
-      mimeType = match[1]
-      base64Data = match[2]
-    } else {
-      base64Data = imageBase64.split(',')[1] || imageBase64
-    }
-  }
-
-  const requestBody = {
-    contents: [
+  const payload = {
+    model: 'gpt-4o',
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
       {
-        parts: [
+        role: 'user',
+        content: [
           {
-            text: SYSTEM_PROMPT + '\n\nAnalyze this architectural floor plan drawing. Extract ALL room polygons, walls, doors, and windows with 100% precision. Return normalized 0-1000 grid coordinates for all geometry. Return ONLY valid JSON, no markdown formatting.'
+            type: 'text',
+            text: 'Analyze this architectural floor plan drawing. Extract ALL room polygons, walls, doors, and windows with 100% precision. Return normalized 0-1000 grid coordinates for all geometry.'
           },
           {
-            inline_data: {
-              mime_type: mimeType,
-              data: base64Data
+            type: 'image_url',
+            image_url: {
+              url: imageBase64.startsWith('data:') ? imageBase64 : `data:image/png;base64,${imageBase64}`,
+              detail: 'high'
             }
           }
         ]
       }
     ],
-    generationConfig: {
-      temperature: 0.1,
-      maxOutputTokens: 8192,
-      responseMimeType: 'application/json'
-    }
+    temperature: 0.1,
+    max_tokens: 4096
   }
 
-  const url = `${GEMINI_API_URL}?key=${key}`
+  const response = await fetch(OPENAI_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${key}`
+    },
+    body: JSON.stringify(payload),
+    signal: abortSignal
+  })
 
-  // Fail-fast timeout for Gemini (10s max)
-  const timeoutController = new AbortController()
-  const timeoutId = setTimeout(() => timeoutController.abort(), 10000)
-  if (abortSignal) {
-    abortSignal.addEventListener('abort', () => timeoutController.abort())
+  if (!response.ok) {
+    const errText = await response.text()
+    throw new Error(`OpenAI API error ${response.status}: ${errText}`)
   }
 
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestBody),
-      signal: timeoutController.signal
-    })
-    clearTimeout(timeoutId)
-
-    if (!response.ok) {
-      const errText = await response.text()
-      throw new Error(`Gemini API error ${response.status}: ${errText.substring(0, 150)}`)
-    }
-
-    const data = await response.json()
-    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text
-    if (!rawText) {
-      throw new Error('Gemini returned empty response')
-    }
-
-    // Clean up JSON — remove markdown fences if present
-    let jsonStr = rawText.trim()
-    if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '')
-    }
-    const parsed = JSON.parse(jsonStr)
-    return buildGeminiResult(parsed, imgWidth, imgHeight)
-  } catch (err: any) {
-    clearTimeout(timeoutId)
-    throw err
+  const data = await response.json()
+  const rawText = data.choices?.[0]?.message?.content
+  if (!rawText) {
+    throw new Error('OpenAI returned empty response')
   }
-}
 
-function buildGeminiResult(parsed: any, imgWidth: number, imgHeight: number): Partial<FloorPlanAnalysisResult> {
+  const parsed = JSON.parse(rawText)
+
   // Convert 0-1000 normalized coordinates to actual image pixel coordinates
   const scaleX = imgWidth / 1000
   const scaleY = imgHeight / 1000
   const pxPerMeter = parsed.px_per_meter_estimate || 50
-
 
   const rooms: AIRoom[] = (parsed.rooms || []).map((r: any, idx: number) => {
     const normPoly: [number, number][] = r.polygon_normalized || [[100, 100], [500, 100], [500, 500], [100, 500]]
@@ -204,7 +168,7 @@ function buildGeminiResult(parsed: any, imgWidth: number, imgHeight: number): Pa
         confidence: { overall: 0.96 },
         low_confidence_flag: false,
         flag_level: 'ok',
-        reason: 'Gemini 2.0 Flash Vision Detection',
+        reason: 'OpenAI GPT-4o Vision Detection',
         all_candidates: {},
         needs_user_confirmation: false
       },

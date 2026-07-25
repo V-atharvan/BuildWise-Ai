@@ -5,6 +5,34 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/**
+ * Safe localStorage.setItem that clears old bw_ keys on QuotaExceededError.
+ * Use this everywhere instead of raw localStorage.setItem for bw_ keys.
+ */
+export function safeLocalStorageSet(key: string, value: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(key, value)
+  } catch (e: any) {
+    if (e?.name === 'QuotaExceededError' || e?.code === 22) {
+      try {
+        // Clear ONLY old estimation records (bw_demo_est_*), NEVER plan records or project list!
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const k = localStorage.key(i)
+          if (k && k.startsWith('bw_demo_est_') && k !== key) {
+            localStorage.removeItem(k)
+          }
+        }
+        localStorage.setItem(key, value)
+      } catch (e2) {
+        console.warn(`safeLocalStorageSet: could not write "${key}" — storage quota reached.`)
+      }
+    } else {
+      console.warn(`safeLocalStorageSet: unexpected error writing "${key}":`, e)
+    }
+  }
+}
+
 export function formatCurrency(amount: number, currency = 'INR'): string {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',

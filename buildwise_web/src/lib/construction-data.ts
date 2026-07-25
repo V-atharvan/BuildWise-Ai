@@ -6,6 +6,7 @@
  * backend data for client-side demo mode and UI dropdowns.
  */
 
+import { safeLocalStorageSet } from './utils'
 // ══════════════════════════════════════════════════════════════════════════════
 // BRICK / BLOCK CATALOG
 // ══════════════════════════════════════════════════════════════════════════════
@@ -325,7 +326,7 @@ export function loadMaterialConfig(projectId?: string): MaterialConfig {
 export function saveMaterialConfig(config: MaterialConfig, projectId?: string) {
   if (typeof window === 'undefined') return
   const key = projectId ? `bw_material_config_${projectId}` : 'bw_material_config'
-  localStorage.setItem(key, JSON.stringify(config))
+  safeLocalStorageSet(key, JSON.stringify(config))
 }
 
 export function recalculateDemoEstimation(projectId: string, config: MaterialConfig) {
@@ -514,7 +515,7 @@ export function recalculateDemoEstimation(projectId: string, config: MaterialCon
       }
 
       est.total_cost = grandTotal
-      localStorage.setItem(key, JSON.stringify(est))
+      safeLocalStorageSet(key, JSON.stringify(est))
     })
   } catch (e) {
     console.error("Local recalculation failed:", e)

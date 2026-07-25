@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Box, Layers, HelpCircle, RefreshCw, Hammer, Coins, Ruler, Edit, Trash2 } from 'lucide-react'
 import { Building3DViewer } from '@/components/three-d/Building3DViewer'
 import { loadMaterialConfig } from '@/lib/construction-data'
+import { safeLocalStorageSet } from '@/lib/utils'
 
 export default function Project3DBuildingTab() {
   const { id: projectId } = useParams() as { id: string }
@@ -44,88 +45,83 @@ export default function Project3DBuildingTab() {
       console.error(e)
     }
 
-    const planData = Object.keys(localStorage)
-      .filter(k => k.startsWith('bw_demo_plan_'))
-      .map(k => JSON.parse(localStorage.getItem(k) || '{}'))
-      .find(p => p.project_id === projectId || p.id === projectId)
+    const loadPlan = async () => {
+      const { getPlanRecord } = await import('@/lib/floor-plan-ai/image-cache')
 
-    const isDemoPlanFile = (filename?: string) => {
-      if (!filename) return true
-      const fn = filename.toLowerCase()
-      return fn.includes('demo_layout') || fn.includes('1000-sq-ft') || fn.includes('house-plan') || fn.includes('house_plan')
-    }
-    const isStaticDemo = projectId?.startsWith('demo_proj_') && isDemoPlanFile(planData?.filename)
-    if (planData?.detected_data?.rooms) {
-      setRooms(planData.detected_data.rooms)
-      setDoors(planData.detected_data.doors || [])
-      setWindows(planData.detected_data.windows || [])
-      setColumns(planData.detected_data.columns || [])
-      setFloorHeight(planData.detected_data.floor_height_m || 3.0)
-      setWallThickness(planData.detected_data.wall_thickness_m || 0.23)
-      if (planData.detected_data.rooms.length > 0) {
-        setSelectedRoomId(planData.detected_data.rooms[0].id)
+      let planData = await getPlanRecord(projectId)
+      if (!planData) {
+        const allPlans = Object.keys(localStorage)
+          .filter(k => k.startsWith('bw_demo_plan_'))
+          .map(k => {
+            try { return JSON.parse(localStorage.getItem(k) || '{}') } catch { return {} }
+          })
+
+        planData = allPlans.find(p => (p.project_id === projectId || p.id === projectId) && (p.detected_data?.rooms?.length > 0 || p.rooms?.length > 0))
+          || allPlans.find(p => p.project_id === projectId || p.id === projectId)
+          || allPlans.find(p => p.detected_data?.rooms?.length > 0 || p.rooms?.length > 0)
       }
-    } else if (isStaticDemo) {
-      const demoRooms = [
-        {
-          id: 'r1',
-          label: 'Living Room',
-          area_m2: 24.8,
-          area_sqft: 267,
-          perimeter_m: 20,
-          length_m: 5.5,
-          width_m: 4.5,
-          polygon: [[100, 100], [466, 100], [466, 400], [100, 400]],
-          centroid: [283, 250],
-          bounding_box: [100, 100, 366, 300],
-          aspect_ratio: 1.22,
-        },
-        {
-          id: 'r2',
-          label: 'Master Bedroom',
-          area_m2: 18.0,
-          area_sqft: 194,
-          perimeter_m: 17,
-          length_m: 4.5,
-          width_m: 4.0,
-          polygon: [[466, 100], [766, 100], [766, 366], [466, 366]],
-          centroid: [616, 233],
-          bounding_box: [466, 100, 300, 266],
-          aspect_ratio: 1.12,
-        },
-        {
-          id: 'r3',
-          label: 'Kitchen',
-          area_m2: 12.0,
-          area_sqft: 129,
-          perimeter_m: 14,
-          length_m: 4.0,
-          width_m: 3.0,
-          polygon: [[100, 400], [366, 400], [366, 600], [100, 600]],
-          centroid: [233, 500],
-          bounding_box: [100, 400, 266, 200],
-          aspect_ratio: 1.33,
-        },
-        {
-          id: 'r4',
-          label: 'Bathroom',
-          area_m2: 5.0,
-          area_sqft: 54,
-          perimeter_m: 9,
-          length_m: 2.5,
-          width_m: 2.0,
-          polygon: [[366, 400], [533, 400], [533, 533], [366, 533]],
-          centroid: [449, 466],
-          bounding_box: [366, 400, 167, 133],
-          aspect_ratio: 1.25,
-        }
-      ]
-      setRooms(demoRooms)
-      setSelectedRoomId('r1')
-    } else {
-      setRooms([])
+
+      const roomsData = planData?.detected_data?.rooms || planData?.rooms
+      const doorsData = planData?.detected_data?.doors || planData?.doors || []
+      const windowsData = planData?.detected_data?.windows || planData?.windows || []
+      const columnsData = planData?.detected_data?.columns || planData?.columns || []
+      const floorH = planData?.detected_data?.floor_height_m || planData?.floor_height_m || 3.0
+      const wallT = planData?.detected_data?.wall_thickness_m || planData?.wall_thickness_m || 0.23
+
+      if (roomsData && roomsData.length > 0) {
+        setRooms(roomsData)
+        setDoors(doorsData)
+        setWindows(windowsData)
+        setColumns(columnsData)
+        setFloorHeight(floorH)
+        setWallThickness(wallT)
+        setSelectedRoomId(roomsData[0].id)
+      } else {
+        const demoRooms = [
+          {
+            id: 'r_bed1', label: 'Bed Room (Top Left)', area_m2: 12.2, area_sqft: 132, perimeter_m: 14.0, length_m: 3.6, width_m: 3.4,
+            polygon: [[100, 100], [420, 100], [420, 420], [100, 420]], centroid: [260, 260], bounding_box: [100, 100, 320, 320], aspect_ratio: 1.05,
+          },
+          {
+            id: 'r_pooja', label: 'Pooja Room', area_m2: 8.4, area_sqft: 90, perimeter_m: 11.6, length_m: 3.0, width_m: 2.8,
+            polygon: [[420, 100], [700, 100], [700, 420], [420, 420]], centroid: [560, 260], bounding_box: [420, 100, 280, 320], aspect_ratio: 1.07,
+          },
+          {
+            id: 'r_bed2', label: 'Bed Room (Top Right)', area_m2: 12.2, area_sqft: 132, perimeter_m: 14.0, length_m: 3.6, width_m: 3.4,
+            polygon: [[700, 100], [1000, 100], [1000, 420], [700, 420]], centroid: [850, 260], bounding_box: [700, 100, 300, 320], aspect_ratio: 1.05,
+          },
+          {
+            id: 'r_lobby', label: 'Lobby / Dining', area_m2: 20.2, area_sqft: 217, perimeter_m: 19.0, length_m: 6.3, width_m: 3.2,
+            polygon: [[100, 420], [700, 420], [700, 720], [100, 720]], centroid: [400, 570], bounding_box: [100, 420, 600, 300], aspect_ratio: 1.96,
+          },
+          {
+            id: 'r_bath1', label: 'Toilet / Bath 1', area_m2: 3.4, area_sqft: 36, perimeter_m: 7.4, length_m: 2.1, width_m: 1.6,
+            polygon: [[700, 420], [850, 420], [850, 720], [700, 720]], centroid: [775, 570], bounding_box: [700, 420, 150, 300], aspect_ratio: 1.3,
+          },
+          {
+            id: 'r_bath2', label: 'Toilet / Bath 2', area_m2: 3.4, area_sqft: 36, perimeter_m: 7.4, length_m: 2.1, width_m: 1.6,
+            polygon: [[850, 420], [1000, 420], [1000, 720], [850, 720]], centroid: [925, 570], bounding_box: [850, 420, 150, 300], aspect_ratio: 1.3,
+          },
+          {
+            id: 'r_kitchen', label: 'Kitchen', area_m2: 10.9, area_sqft: 117, perimeter_m: 13.2, length_m: 3.4, width_m: 3.2,
+            polygon: [[100, 720], [420, 720], [420, 1000], [100, 1000]], centroid: [260, 860], bounding_box: [100, 720, 320, 280], aspect_ratio: 1.06,
+          },
+          {
+            id: 'r_living', label: 'Living Area', area_m2: 10.2, area_sqft: 110, perimeter_m: 12.8, length_m: 3.4, width_m: 3.0,
+            polygon: [[420, 720], [700, 720], [700, 1000], [420, 1000]], centroid: [560, 860], bounding_box: [420, 720, 280, 280], aspect_ratio: 1.13,
+          },
+          {
+            id: 'r_bed3', label: 'Bed Room (Bottom Right)', area_m2: 12.2, area_sqft: 132, perimeter_m: 14.0, length_m: 3.6, width_m: 3.4,
+            polygon: [[700, 720], [1000, 720], [1000, 1000], [700, 1000]], centroid: [850, 860], bounding_box: [700, 720, 300, 280], aspect_ratio: 1.05,
+          }
+        ]
+        setRooms(demoRooms)
+        setSelectedRoomId('r_bed1')
+      }
+      setIsLoading(false)
     }
-    setIsLoading(false)
+
+    loadPlan()
   }, [projectId])
 
   const selectedRoom = rooms.find(r => r.id === selectedRoomId) ?? null
@@ -139,7 +135,7 @@ export default function Project3DBuildingTab() {
         plan.detected_data.rooms = updatedRooms
         plan.detected_data.floor_height_m = floorHeight
         plan.detected_data.wall_thickness_m = wallThickness
-        localStorage.setItem(planKey, JSON.stringify(plan))
+        safeLocalStorageSet(planKey, JSON.stringify(plan))
       }
     }
   }
@@ -184,7 +180,7 @@ export default function Project3DBuildingTab() {
       const plan = JSON.parse(localStorage.getItem(planKey) || '{}')
       if (plan.detected_data) {
         plan.detected_data.wall_thickness_m = val
-        localStorage.setItem(planKey, JSON.stringify(plan))
+        safeLocalStorageSet(planKey, JSON.stringify(plan))
       }
     }
   }

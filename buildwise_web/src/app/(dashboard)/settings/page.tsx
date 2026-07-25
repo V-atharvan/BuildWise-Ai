@@ -2,9 +2,7 @@
 
 import { useTheme } from '@/providers/ThemeProvider'
 import { useState, useEffect } from 'react'
-import { Sun, Moon, Bell, Shield, Languages, Ruler, Eye, Loader2, Sparkles, KeyRound, CheckCircle2, AlertCircle, EyeOff } from 'lucide-react'
-import { getGeminiApiKey, setGeminiApiKey, validateGeminiKey } from '@/lib/floor-plan-ai/gemini-analyzer'
-import type { GeminiModel } from '@/lib/floor-plan-ai/gemini-analyzer'
+import { Sun, Moon, Bell, Shield, Languages, Ruler, Eye, Loader2 } from 'lucide-react'
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme()
@@ -16,53 +14,14 @@ export default function SettingsPage() {
   const [emailAlerts, setEmailAlerts] = useState(true)
   const [processAlerts, setProcessAlerts] = useState(true)
 
-  // AI Engine states
-  const [geminiKey, setGeminiKeyState] = useState('')
-  const [geminiKeyInput, setGeminiKeyInput] = useState('')
-  const [showGeminiKey, setShowGeminiKey] = useState(false)
-  const [geminiModel, setGeminiModel] = useState<GeminiModel>('gemini-3.5-flash')
-  const [testingKey, setTestingKey] = useState(false)
-  const [keyStatus, setKeyStatus] = useState<'untested' | 'valid' | 'invalid'>('untested')
-
   // Ensure theme is mounted to prevent hydration mismatches
   useEffect(() => {
     setMounted(true)
     const savedUnit = localStorage.getItem('bw-pref-unit') || 'metric'
     const savedLang = localStorage.getItem('bw-pref-lang') || 'en'
-    const savedModel = (localStorage.getItem('bw_gemini_model') as GeminiModel) || 'gemini-3.5-flash'
     setUnit(savedUnit)
     setLang(savedLang)
-    setGeminiModel(savedModel)
-    const key = getGeminiApiKey()
-    setGeminiKeyState(key)
-    setGeminiKeyInput(key)
-    if (key) setKeyStatus('untested')
   }, [])
-
-  const handleTestAndSaveKey = async () => {
-    if (!geminiKeyInput.trim()) return
-    setTestingKey(true)
-    setKeyStatus('untested')
-    const valid = await validateGeminiKey(geminiKeyInput.trim(), geminiModel)
-    setKeyStatus(valid ? 'valid' : 'invalid')
-    if (valid) {
-      setGeminiApiKey(geminiKeyInput.trim())
-      setGeminiKeyState(geminiKeyInput.trim())
-    }
-    setTestingKey(false)
-  }
-
-  const handleModelChange = (m: GeminiModel) => {
-    setGeminiModel(m)
-    localStorage.setItem('bw_gemini_model', m)
-  }
-
-  const handleClearKey = () => {
-    setGeminiApiKey('')
-    setGeminiKeyState('')
-    setGeminiKeyInput('')
-    setKeyStatus('untested')
-  }
 
 
   const handleUnitChange = (val: string) => {

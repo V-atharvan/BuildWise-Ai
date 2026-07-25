@@ -7,6 +7,8 @@ import {
   Upload, FileText, AlertCircle, X, Loader2, ArrowRight, Plus, Folder
 } from 'lucide-react'
 import { projectsApi } from '@/lib/api'
+import { savePlanImageDataUrl } from '@/lib/floor-plan-ai/image-cache'
+import { safeLocalStorageSet } from '@/lib/utils'
 
 // ── Demo projects stored in localStorage ──────────────────────────────────────
 const DEMO_PROJECTS_KEY = 'bw_demo_projects'
@@ -176,21 +178,47 @@ export default function UploadPage() {
         (pct) => setProgress(pct),
         (planId) => {
           if (fileDataUrl) {
+            if (typeof window !== 'undefined') {
+              (window as any).__BW_LAST_UPLOADED_IMAGE__ = fileDataUrl
+            }
+            savePlanImageDataUrl(planId, fileDataUrl)
+            savePlanImageDataUrl(activeProjectId, fileDataUrl)
+          }
+
+          // Clear old stale demo plans to force fresh calculation
+          if (typeof window !== 'undefined') {
             try {
-              localStorage.setItem(`bw_demo_file_data_${planId}`, fileDataUrl)
+              for (let i = localStorage.length - 1; i >= 0; i--) {
+                const key = localStorage.key(i)
+                if (key && (key.startsWith('bw_demo_est_') || (key.startsWith('bw_demo_plan_') && !key.endsWith(planId)))) {
+                  // Keep basic projects list, clear stale plan caches
+                  if (key !== 'bw_demo_projects') {
+                    localStorage.removeItem(key)
+                  }
+                }
+              }
             } catch { /* ignore */ }
           }
 
-          // Store demo plan so analysis page can read it
-          localStorage.setItem(`bw_demo_plan_${planId}`, JSON.stringify({
+          const recordObj = {
             id: planId,
             project_id: activeProjectId,
             filename: file.name,
             file_size: file.size,
             status: 'done',
             created_at: new Date().toISOString(),
-          }))
-          router.push(`/analysis/${planId}`)
+          }
+
+          import('@/lib/floor-plan-ai/image-cache').then(({ savePlanRecord }) => {
+            savePlanRecord(planId, activeProjectId, recordObj)
+          })
+
+          const planRecord = JSON.stringify(recordObj)
+          try {
+            safeLocalStorageSet(`bw_demo_plan_${planId}`, planRecord)
+          } catch { /* ignore */ }
+
+          router.push(`/analysis/${planId}?project_id=${activeProjectId}`)
         }
       )
     }

@@ -9,7 +9,8 @@ import {
   CheckCircle2, Clock, AlertTriangle, RefreshCw, BarChart2,
   FolderOpen, Building, Eye, Users, Shield, MapPin, Edit3, Save, X
 } from 'lucide-react'
-import { projectsApi } from '@/lib/api'
+import { projectsApi, uploadApi } from '@/lib/api'
+import { getPlanImageDataUrl } from '@/lib/floor-plan-ai/image-cache'
 import { formatDate, formatRelativeTime, formatCurrency } from '@/lib/utils'
 
 // ── Load a single demo project from localStorage ───────────────────────────────
@@ -381,8 +382,8 @@ export default function ProjectDetailPage() {
                         {plan.status}
                       </span>
                       <button
-                        onClick={() => {
-                          const saved = localStorage.getItem(`bw_demo_file_data_${plan.id}`)
+                        onClick={async () => {
+                          const saved = (await getPlanImageDataUrl(plan.id)) || localStorage.getItem(`bw_demo_file_data_${plan.id}`)
                           setViewingPlanUrl(saved || BLUEPRINT_FALLBACK)
                           setViewingPlanName(plan.filename)
                         }}

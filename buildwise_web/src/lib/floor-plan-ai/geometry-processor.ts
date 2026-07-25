@@ -6,8 +6,10 @@
 import type {
   FloorPlanAnalysisResult, AIRoom, AIWall, AIDoor, AIWindow,
   GeometryValidation, GeometryIssue, PixelPoint,
-  AIColumn, AIStaircase, GeometryRelationships
+  AIColumn, AIStaircase, GeometryRelationships,
+  PolygonSolverResult
 } from './types'
+import { solvePolygonConstraints } from './polygon-solver'
 
 const GAP_THRESHOLD_PX = 8   // Max gap to auto-close between wall endpoints
 const OVERLAP_TOLERANCE_PX2 = 100  // Min overlap area to flag as issue
@@ -205,8 +207,9 @@ function getWallAdjacentToRoom(wall: AIWall, room: AIRoom, threshold: number = 3
 // ── Main Geometry Validation ────────────────────────────────────────────────
 
 export function validateAndCorrectGeometry(
-  result: Omit<FloorPlanAnalysisResult, 'image_enhancement' | 'geometry_validation'>
-): GeometryValidation {
+  result: Omit<FloorPlanAnalysisResult, 'image_enhancement' | 'geometry_validation'>,
+  pxPerMeter?: number,
+): GeometryValidation & { polygon_solver?: PolygonSolverResult } {
   const issues: GeometryIssue[] = []
   let autoCorrections = 0
 
@@ -251,6 +254,21 @@ export function validateAndCorrectGeometry(
   // 3. Validate walls
   const validatedWalls = validateWalls(result.walls, issues)
   result.walls = validatedWalls
+
+  // 3.5. Run polygon constraint solver
+  let solverResult: PolygonSolverResult | undefined
+  if (validatedRooms.length > 0 && pxPerMeter && pxPerMeter > 0) {
+    try {
+      solverResult = solvePolygonConstraints(
+        validatedRooms,
+        validatedWalls,
+        pxPerMeter,
+      )
+      autoCorrections += solverResult.vertices_snapped + solverResult.overlaps_resolved
+    } catch (err) {
+      console.warn('[GeometryProcessor] Polygon solver failed:', err)
+    }
+  }
 
   // 4. Associate orphan doors/windows with walls
   result.doors = associateDoorsWithWalls(result.doors, validatedWalls, issues)
@@ -387,6 +405,7 @@ export function validateAndCorrectGeometry(
     rooms_validated: validatedRooms.length,
     walls_validated: validatedWalls.length,
     auto_corrections_applied: autoCorrections,
+    polygon_solver: solverResult,
   }
 }
 
@@ -449,6 +468,6 @@ export function estimatePxPerMeterFromRooms(rooms: AIRoom[]): number {
     count++
   }
 
-  if (count === 0) return 50  // Default: 50px = 1m (1:50 scale at 96dpi)
+  if (count === 0) return 0  // Return 0 → forces user scale confirmation instead of guessing
   return totalRatio / count
 }

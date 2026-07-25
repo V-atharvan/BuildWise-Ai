@@ -199,6 +199,20 @@ export interface GeometryValidation {
   auto_corrections_applied: number
 }
 
+// ── Polygon Solver Result ───────────────────────────────────────────────────
+
+export interface PolygonSolverResult {
+  vertices_snapped: number
+  edges_aligned_to_walls: number
+  overlaps_resolved: number
+  gaps_filled: number
+  edges_regularized: number
+  total_area_before: number       // total room area in px² before solver
+  total_area_after: number        // total room area in px² after solver
+  area_change_percent: number     // should be < 5%
+  solver_duration_ms: number
+}
+
 // ── Drawing Classification ──────────────────────────────────────────────────
 
 export type DrawingType =
@@ -326,7 +340,7 @@ export interface FloorPlanAnalysisResult {
   low_confidence_room_ids: string[]   // rooms requiring user review
   needs_user_review: boolean
 
-  // Raw Gemini Response (for debugging)
+  // Raw AI Response (for debugging)
   raw_ai_response?: string
 }
 
@@ -341,6 +355,7 @@ export type PipelineStepId =
   | 'doors_windows'
   | 'classify'
   | 'confidence'
+  | 'polygon_fix'
   | 'validate'
   | 'generate'
   | 'done'
@@ -357,6 +372,9 @@ export interface PipelineStep {
   error?: string
   duration_ms?: number
 
+  // Scale confirmation pause
+  needs_scale_confirmation?: boolean  // if true, pipeline pauses for user input
+
   // Live preview data (shown during analysis)
   preview?: {
     rooms_found?: number
@@ -366,6 +384,7 @@ export interface PipelineStep {
     ocr_texts?: string[]
     scale_text?: string
     confidence_avg?: number
+    polygon_solver?: PolygonSolverResult
   }
 }
 
@@ -384,8 +403,7 @@ export interface PipelineState {
 export interface PipelineOptions {
   plan_id: string
   project_id: string
-  gemini_api_key: string
-  gemini_model?: 'gemini-3.5-flash' | 'gemini-3.1-flash-lite' | 'gemini-2.0-flash' | 'gemini-1.5-pro' | 'gemini-2.0-flash-exp'
+  use_local_engine?: boolean         // 100% local CV engine (no API key needed)
   abort_signal?: AbortSignal
   floor_height_m?: number             // override default 3.0
   wall_thickness_m?: number           // override default 0.23

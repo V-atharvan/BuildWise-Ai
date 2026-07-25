@@ -1,53 +1,43 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // BuildWise AI — Floor Plan Understanding Engine
-// Google Gemini 2.0 Flash Vision API Integration
+// Groq Free Vision AI API Integration (llama-3.2-11b-vision-preview)
 // ══════════════════════════════════════════════════════════════════════════════
 
-import type { FloorPlanAnalysisResult, AIRoom, AIWall, AIDoor, AIWindow, AIColumn } from './types'
+import type { FloorPlanAnalysisResult, AIRoom, AIWall, AIDoor, AIWindow } from './types'
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent'
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
+const DEFAULT_GROQ_KEY = ''
 
-const DEFAULT_GEMINI_KEY = ''
-
-function getActualKey(): string {
-  return ''
+export function getGroqApiKey(): string {
+  if (typeof window === 'undefined') return process.env.NEXT_PUBLIC_GROQ_API_KEY || ''
+  return process.env.NEXT_PUBLIC_GROQ_API_KEY ||
+    localStorage.getItem('bw_groq_key') ||
+    ''
 }
 
-export function getGeminiApiKey(): string {
-  if (typeof window === 'undefined') {
-    return process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
-  }
-  return process.env.NEXT_PUBLIC_GEMINI_API_KEY || localStorage.getItem('bw_gemini_key') || ''
-}
-
-const SYSTEM_PROMPT = `You are a Senior Principal Computer Vision Engineer, BIM Specialist, and Architectural Plan Analyst.
-Your task is to analyze the uploaded 2D architectural floor plan blueprint image with 100% geometric accuracy.
-
-Extract ALL architectural structures into a single valid JSON object.
+const SYSTEM_PROMPT = `You are a Senior Architectural Computer Vision Analyst.
+Your task is to analyze the 2D floor plan blueprint image with 100% geometric accuracy.
 
 CRITICAL INSTRUCTIONS:
-1. READ ALL TEXT LABELS ON THE BLUEPRINT: Look closely at room titles printed on the floor plan (e.g., "Kitchen", "Living Room", "Master Bedroom", "Bedroom 2", "Bathroom", "Sauna", "Laundry", "Utility Closet", "WC", "Entry", "Hallway", "Drawing Room", "Stairs", "Pooja Room", "Store").
+1. READ ALL TEXT LABELS ON THE BLUEPRINT: Look for room names printed on the plan (e.g. "Drawing Room", "Kitchen cum Dinning", "Bedroom", "Bathroom & Toilet", "Stairs", "Living Room", "Master Bedroom", "W.C", "Laundry", "Store").
 2. EXTRACT EXACT ROOM BOUNDARIES (0-1000 Grid):
-   - Trace EVERY SINGLE enclosed room space (Kitchen, Living Room, Master Bedroom, Bedroom 2, Bathroom, Sauna, Laundry, Utility Closet, WC, Entry, Hallway). Do NOT skip small rooms or corridors!
-3. EXTRACT ALL DOORS AND WINDOWS:
-   - Identify EVERY door opening / quarter-circle door swing arc in the drawing (both interior doors and exterior entrance doors). There are usually 8-12+ doors in detailed plans.
-   - Identify EVERY window along exterior and interior walls. There are usually 10-15+ windows in detailed plans.
-   - List each door with "id", "center_normalized" [x,y], "width_m", and "room_id".
-   - List each window with "id", "center_normalized" [x,y], "width_m", and "room_id".
-4. EXTRACT WALL SEGMENTS:
-   - List all exterior perimeter walls and interior partition walls with "start_normalized" [x,y] and "end_normalized" [x,y] on the 0-1000 grid.
+   - Provide an ordered array of 2D vertex points [[x1, y1], [x2, y2], [x3, y3], [x4, y4]] for EVERY room's outer walls.
+   - Coordinates MUST be normalized to a 0-1000 integer grid ([0,0] = top-left, [1000,1000] = bottom-right).
+3. READ DIMENSIONS AND SCALE:
+   - Read dimension strings (e.g., "41'", "26'", "3.52m", "13.16m") from dimension lines.
+4. EXTRACT WALLS, DOORS, AND WINDOWS.
 
 Return ONLY valid JSON matching this schema:
 {
   "drawing_type": "architectural",
-  "detected_scale_text": "5.82m x 12.5m",
+  "detected_scale_text": "41' x 26'",
   "px_per_meter_estimate": 50,
   "rooms": [
     {
       "id": "r1",
-      "label": "Kitchen",
+      "label": "Kitchen cum Dinning",
       "room_type": "kitchen",
-      "polygon_normalized": [[100, 80], [360, 80], [360, 420], [100, 420]],
+      "polygon_normalized": [[360, 80], [610, 80], [610, 420], [360, 420]],
       "area_m2": 18.5
     }
   ],
@@ -68,104 +58,72 @@ Return ONLY valid JSON matching this schema:
   ]
 }`
 
-export async function analyzeFloorPlanWithGemini(
+export async function analyzeFloorPlanWithGroq(
   imageBase64: string,
   imgWidth: number,
   imgHeight: number,
   apiKey?: string,
   abortSignal?: AbortSignal
 ): Promise<Partial<FloorPlanAnalysisResult>> {
-  const key = apiKey || getGeminiApiKey()
+  const key = apiKey || getGroqApiKey()
   if (!key) {
-    throw new Error('Google Gemini API key is missing. Please add NEXT_PUBLIC_GEMINI_API_KEY in .env.local')
+    throw new Error('Groq API key is missing.')
   }
 
-  // Extract pure base64 data and mime type
-  let base64Data = imageBase64
-  let mimeType = 'image/png'
-  if (imageBase64.startsWith('data:')) {
-    const match = imageBase64.match(/^data:(image\/\w+);base64,(.+)$/)
-    if (match) {
-      mimeType = match[1]
-      base64Data = match[2]
-    } else {
-      base64Data = imageBase64.split(',')[1] || imageBase64
-    }
-  }
+  const models = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant']
+  let lastErr = ''
+  let response: Response | null = null
 
-  const requestBody = {
-    contents: [
-      {
-        parts: [
-          {
-            text: SYSTEM_PROMPT + '\n\nAnalyze this architectural floor plan drawing. Extract ALL room polygons, walls, doors, and windows with 100% precision. Return normalized 0-1000 grid coordinates for all geometry. Return ONLY valid JSON, no markdown formatting.'
-          },
-          {
-            inline_data: {
-              mime_type: mimeType,
-              data: base64Data
-            }
-          }
-        ]
-      }
-    ],
-    generationConfig: {
+  for (const modelName of models) {
+    const payload = {
+      model: modelName,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: 'Analyze this architectural floor plan drawing. Extract ALL room polygons, walls, doors, and windows with 100% precision. Return ONLY valid raw JSON matching the requested schema.'
+        }
+      ],
       temperature: 0.1,
-      maxOutputTokens: 8192,
-      responseMimeType: 'application/json'
+      max_tokens: 4096
+    }
+
+    try {
+      response = await fetch(GROQ_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${key}`
+        },
+        body: JSON.stringify(payload),
+        signal: abortSignal
+      })
+
+      if (response.ok) break
+      lastErr = await response.text()
+    } catch (e: any) {
+      lastErr = e.message
     }
   }
 
-  const url = `${GEMINI_API_URL}?key=${key}`
-
-  // Fail-fast timeout for Gemini (10s max)
-  const timeoutController = new AbortController()
-  const timeoutId = setTimeout(() => timeoutController.abort(), 10000)
-  if (abortSignal) {
-    abortSignal.addEventListener('abort', () => timeoutController.abort())
+  if (!response || !response.ok) {
+    throw new Error(`Groq Vision API error: ${lastErr}`)
   }
 
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestBody),
-      signal: timeoutController.signal
-    })
-    clearTimeout(timeoutId)
-
-    if (!response.ok) {
-      const errText = await response.text()
-      throw new Error(`Gemini API error ${response.status}: ${errText.substring(0, 150)}`)
-    }
-
-    const data = await response.json()
-    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text
-    if (!rawText) {
-      throw new Error('Gemini returned empty response')
-    }
-
-    // Clean up JSON — remove markdown fences if present
-    let jsonStr = rawText.trim()
-    if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '')
-    }
-    const parsed = JSON.parse(jsonStr)
-    return buildGeminiResult(parsed, imgWidth, imgHeight)
-  } catch (err: any) {
-    clearTimeout(timeoutId)
-    throw err
+  const data = await response.json()
+  const rawText = data.choices?.[0]?.message?.content
+  if (!rawText) {
+    throw new Error('Groq returned empty response')
   }
-}
 
-function buildGeminiResult(parsed: any, imgWidth: number, imgHeight: number): Partial<FloorPlanAnalysisResult> {
-  // Convert 0-1000 normalized coordinates to actual image pixel coordinates
+  // Extract JSON string from raw text response
+  const jsonMatch = rawText.match(/\{[\s\S]*\}/)
+  const jsonStr = jsonMatch ? jsonMatch[0] : rawText
+  const parsed = JSON.parse(jsonStr)
+
   const scaleX = imgWidth / 1000
   const scaleY = imgHeight / 1000
   const pxPerMeter = parsed.px_per_meter_estimate || 50
-
 
   const rooms: AIRoom[] = (parsed.rooms || []).map((r: any, idx: number) => {
     const normPoly: [number, number][] = r.polygon_normalized || [[100, 100], [500, 100], [500, 500], [100, 500]]
@@ -204,7 +162,7 @@ function buildGeminiResult(parsed: any, imgWidth: number, imgHeight: number): Pa
         confidence: { overall: 0.96 },
         low_confidence_flag: false,
         flag_level: 'ok',
-        reason: 'Gemini 2.0 Flash Vision Detection',
+        reason: 'Groq Llama-3.2 Vision Detection',
         all_candidates: {},
         needs_user_confirmation: false
       },

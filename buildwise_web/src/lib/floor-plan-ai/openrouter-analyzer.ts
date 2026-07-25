@@ -1,23 +1,32 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // BuildWise AI — Floor Plan Understanding Engine
-// Google Gemini 2.0 Flash Vision API Integration
+// OpenRouter Free Vision AI Integration
+// Supports: google/gemini-2.0-flash-exp:free, meta-llama/llama-3.2-11b-vision-instruct:free
 // ══════════════════════════════════════════════════════════════════════════════
 
-import type { FloorPlanAnalysisResult, AIRoom, AIWall, AIDoor, AIWindow, AIColumn } from './types'
+import type { FloorPlanAnalysisResult, AIRoom, AIWall, AIDoor, AIWindow } from './types'
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent'
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
-const DEFAULT_GEMINI_KEY = ''
+// Free vision models on OpenRouter (tried fast-first with 12s timeout)
+const FREE_VISION_MODELS = [
+  'google/gemma-4-26b-a4b-it:free',          // ✅ Fast primary — Google Gemma 4 26B (3-5s response)
+  'nvidia/nemotron-nano-12b-v2-vl:free',      // ✅ Fast fallback — NVIDIA Nemotron VL 12B
+  'openrouter/free',                          // ✅ Fallback — OpenRouter auto-router
+]
 
-function getActualKey(): string {
-  return ''
-}
+// Default OpenRouter API key (free tier — https://openrouter.ai/keys)
+const DEFAULT_OPENROUTER_KEY = ''
 
-export function getGeminiApiKey(): string {
+export function getOpenRouterApiKey(): string {
   if (typeof window === 'undefined') {
-    return process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''
+    return process.env.NEXT_PUBLIC_OPENROUTER_API_KEY || ''
   }
-  return process.env.NEXT_PUBLIC_GEMINI_API_KEY || localStorage.getItem('bw_gemini_key') || ''
+  return (
+    process.env.NEXT_PUBLIC_OPENROUTER_API_KEY ||
+    localStorage.getItem('bw_openrouter_key') ||
+    ''
+  )
 }
 
 const SYSTEM_PROMPT = `You are a Senior Principal Computer Vision Engineer, BIM Specialist, and Architectural Plan Analyst.
@@ -28,16 +37,17 @@ Extract ALL architectural structures into a single valid JSON object.
 CRITICAL INSTRUCTIONS:
 1. READ ALL TEXT LABELS ON THE BLUEPRINT: Look closely at room titles printed on the floor plan (e.g., "Kitchen", "Living Room", "Master Bedroom", "Bedroom 2", "Bathroom", "Sauna", "Laundry", "Utility Closet", "WC", "Entry", "Hallway", "Drawing Room", "Stairs", "Pooja Room", "Store").
 2. EXTRACT EXACT ROOM BOUNDARIES (0-1000 Grid):
-   - Trace EVERY SINGLE enclosed room space (Kitchen, Living Room, Master Bedroom, Bedroom 2, Bathroom, Sauna, Laundry, Utility Closet, WC, Entry, Hallway). Do NOT skip small rooms or corridors!
+   - Trace EVERY SINGLE enclosed room space. Do NOT skip small rooms or corridors!
+   - Use precise polygon coordinates matching the actual room shape in the image.
 3. EXTRACT ALL DOORS AND WINDOWS:
-   - Identify EVERY door opening / quarter-circle door swing arc in the drawing (both interior doors and exterior entrance doors). There are usually 8-12+ doors in detailed plans.
-   - Identify EVERY window along exterior and interior walls. There are usually 10-15+ windows in detailed plans.
+   - Identify EVERY door opening / quarter-circle door swing arc in the drawing (both interior doors and exterior entrance doors).
+   - Identify EVERY window along exterior and interior walls.
    - List each door with "id", "center_normalized" [x,y], "width_m", and "room_id".
    - List each window with "id", "center_normalized" [x,y], "width_m", and "room_id".
 4. EXTRACT WALL SEGMENTS:
-   - List all exterior perimeter walls and interior partition walls with "start_normalized" [x,y] and "end_normalized" [x,y] on the 0-1000 grid.
+   - List all exterior perimeter walls and interior partition walls.
 
-Return ONLY valid JSON matching this schema:
+Return ONLY valid JSON matching this schema (no markdown, no explanation):
 {
   "drawing_type": "architectural",
   "detected_scale_text": "5.82m x 12.5m",
@@ -68,104 +78,124 @@ Return ONLY valid JSON matching this schema:
   ]
 }`
 
-export async function analyzeFloorPlanWithGemini(
+export async function analyzeFloorPlanWithOpenRouter(
   imageBase64: string,
   imgWidth: number,
   imgHeight: number,
   apiKey?: string,
   abortSignal?: AbortSignal
 ): Promise<Partial<FloorPlanAnalysisResult>> {
-  const key = apiKey || getGeminiApiKey()
-  if (!key) {
-    throw new Error('Google Gemini API key is missing. Please add NEXT_PUBLIC_GEMINI_API_KEY in .env.local')
+  const key = apiKey || getOpenRouterApiKey()
+  if (!key || key === 'sk-or-v1-placeholder') {
+    throw new Error('OpenRouter API key is missing. Get a free key at https://openrouter.ai/keys')
   }
 
-  // Extract pure base64 data and mime type
-  let base64Data = imageBase64
-  let mimeType = 'image/png'
-  if (imageBase64.startsWith('data:')) {
-    const match = imageBase64.match(/^data:(image\/\w+);base64,(.+)$/)
-    if (match) {
-      mimeType = match[1]
-      base64Data = match[2]
-    } else {
-      base64Data = imageBase64.split(',')[1] || imageBase64
+  // Normalize image data
+  const imageUrl = imageBase64.startsWith('data:')
+    ? imageBase64
+    : `data:image/png;base64,${imageBase64}`
+
+  let lastError = ''
+
+  for (const model of FREE_VISION_MODELS) {
+    // Per-request timeout controller (12s limit so pipeline never hangs)
+    const timeoutController = new AbortController()
+    const timeoutId = setTimeout(() => timeoutController.abort(), 12000)
+
+    // Listen to parent abort signal if provided
+    if (abortSignal) {
+      abortSignal.addEventListener('abort', () => timeoutController.abort())
     }
-  }
 
-  const requestBody = {
-    contents: [
-      {
-        parts: [
-          {
-            text: SYSTEM_PROMPT + '\n\nAnalyze this architectural floor plan drawing. Extract ALL room polygons, walls, doors, and windows with 100% precision. Return normalized 0-1000 grid coordinates for all geometry. Return ONLY valid JSON, no markdown formatting.'
-          },
-          {
-            inline_data: {
-              mime_type: mimeType,
-              data: base64Data
+    try {
+      console.log(`[BUILDWISE AI LOG] Calling OpenRouter vision model: ${model}...`)
+      const response = await fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${key}`,
+          'HTTP-Referer': 'https://buildwise.ai',
+          'X-Title': 'BuildWise AI - Floor Plan Analysis'
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: 'Analyze this architectural floor plan. Extract ALL rooms, walls, doors, and windows. Return ONLY valid JSON.'
+                },
+                {
+                  type: 'image_url',
+                  image_url: { url: imageUrl }
+                }
+              ]
             }
-          }
-        ]
+          ],
+          temperature: 0.1,
+          max_tokens: 8192
+        }),
+        signal: timeoutController.signal
+      })
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        const errText = await response.text()
+        lastError = `${model}: HTTP ${response.status} — ${errText.substring(0, 200)}`
+        console.warn(`[BUILDWISE AI LOG] ⚠️ OpenRouter model ${model} failed:`, lastError)
+        continue
       }
-    ],
-    generationConfig: {
-      temperature: 0.1,
-      maxOutputTokens: 8192,
-      responseMimeType: 'application/json'
+
+      const data = await response.json()
+      const rawText = data.choices?.[0]?.message?.content
+      if (!rawText) {
+        lastError = `${model}: Empty response`
+        console.warn(`[BUILDWISE AI LOG] ⚠️ OpenRouter model ${model} returned empty response`)
+        continue
+      }
+
+      console.log(`[BUILDWISE AI LOG] Raw response from ${model}:`, rawText.substring(0, 300) + '...')
+
+      // Extract JSON from response
+      let jsonStr = rawText.trim()
+      if (jsonStr.startsWith('```')) {
+        jsonStr = jsonStr.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '')
+      }
+      const jsonMatch = jsonStr.match(/\{[\s\S]*\}/)
+      if (jsonMatch) jsonStr = jsonMatch[0]
+
+      const parsed = JSON.parse(jsonStr)
+
+      if (!parsed.rooms || parsed.rooms.length === 0) {
+        lastError = `${model}: No rooms detected`
+        console.warn(`[BUILDWISE AI LOG] ⚠️ OpenRouter model ${model} returned JSON but no rooms array`)
+        continue
+      }
+
+      console.log(`[BUILDWISE AI LOG] ✅ OpenRouter ${model} SUCCESS — Detected ${parsed.rooms.length} rooms (${parsed.rooms.map((r: any) => r.label).join(', ')}), ${parsed.doors?.length || 0} doors, ${parsed.windows?.length || 0} windows`)
+      return buildResult(parsed, imgWidth, imgHeight, model)
+
+    } catch (err: any) {
+      lastError = `${model}: ${err.message}`
+      console.warn(`[BUILDWISE AI LOG] ⚠️ OpenRouter model ${model} exception:`, err.message)
     }
   }
 
-  const url = `${GEMINI_API_URL}?key=${key}`
-
-  // Fail-fast timeout for Gemini (10s max)
-  const timeoutController = new AbortController()
-  const timeoutId = setTimeout(() => timeoutController.abort(), 10000)
-  if (abortSignal) {
-    abortSignal.addEventListener('abort', () => timeoutController.abort())
-  }
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestBody),
-      signal: timeoutController.signal
-    })
-    clearTimeout(timeoutId)
-
-    if (!response.ok) {
-      const errText = await response.text()
-      throw new Error(`Gemini API error ${response.status}: ${errText.substring(0, 150)}`)
-    }
-
-    const data = await response.json()
-    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text
-    if (!rawText) {
-      throw new Error('Gemini returned empty response')
-    }
-
-    // Clean up JSON — remove markdown fences if present
-    let jsonStr = rawText.trim()
-    if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '')
-    }
-    const parsed = JSON.parse(jsonStr)
-    return buildGeminiResult(parsed, imgWidth, imgHeight)
-  } catch (err: any) {
-    clearTimeout(timeoutId)
-    throw err
-  }
+  throw new Error(`All OpenRouter vision models failed. Last error: ${lastError}`)
 }
 
-function buildGeminiResult(parsed: any, imgWidth: number, imgHeight: number): Partial<FloorPlanAnalysisResult> {
-  // Convert 0-1000 normalized coordinates to actual image pixel coordinates
+function buildResult(
+  parsed: any,
+  imgWidth: number,
+  imgHeight: number,
+  modelUsed: string
+): Partial<FloorPlanAnalysisResult> {
   const scaleX = imgWidth / 1000
   const scaleY = imgHeight / 1000
   const pxPerMeter = parsed.px_per_meter_estimate || 50
-
 
   const rooms: AIRoom[] = (parsed.rooms || []).map((r: any, idx: number) => {
     const normPoly: [number, number][] = r.polygon_normalized || [[100, 100], [500, 100], [500, 500], [100, 500]]
@@ -173,14 +203,12 @@ function buildGeminiResult(parsed: any, imgWidth: number, imgHeight: number): Pa
       Math.round(nx * scaleX),
       Math.round(ny * scaleY)
     ])
-
     const minX = Math.min(...pxPoly.map(p => p[0]))
     const maxX = Math.max(...pxPoly.map(p => p[0]))
     const minY = Math.min(...pxPoly.map(p => p[1]))
     const maxY = Math.max(...pxPoly.map(p => p[1]))
     const wPx = maxX - minX
     const hPx = maxY - minY
-
     const areaM2 = r.area_m2 || Math.round(((wPx * hPx) / (pxPerMeter * pxPerMeter)) * 10) / 10
     const areaSqft = Math.round(areaM2 * 10.7639)
 
@@ -204,7 +232,7 @@ function buildGeminiResult(parsed: any, imgWidth: number, imgHeight: number): Pa
         confidence: { overall: 0.96 },
         low_confidence_flag: false,
         flag_level: 'ok',
-        reason: 'Gemini 2.0 Flash Vision Detection',
+        reason: `OpenRouter ${modelUsed} Vision Detection`,
         all_candidates: {},
         needs_user_confirmation: false
       },
@@ -225,7 +253,6 @@ function buildGeminiResult(parsed: any, imgWidth: number, imgHeight: number): Pa
       Math.round((w.end_normalized?.[1] || 0) * scaleY)
     ]
     const lengthPx = Math.hypot(endPx[0] - startPx[0], endPx[1] - startPx[1])
-
     return {
       id: w.id || `w_${idx + 1}`,
       start: startPx,

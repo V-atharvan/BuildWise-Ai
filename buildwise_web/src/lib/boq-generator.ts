@@ -5,108 +5,162 @@ import autoTable from 'jspdf-autotable'
 
 export interface BOQItem {
   srNo: number
+  category: string
   description: string
+  isCode: string
+  formula: string
   quantity: number
   unit: string
   rate: number
   amount: number
-  category: string
+  wastePct: number
+  gstPct: number
 }
 
 export function generateBOQItems(estimation: any): BOQItem[] {
-  const m = estimation.materials
+  const m = estimation.materials || {}
   const c = estimation.cost_breakdown || estimation.cost || {}
-  
+  const p = estimation.user_inputs || {}
+
   const items: BOQItem[] = []
   let index = 1
 
-  const add = (desc: string, qty: number, unit: string, rate: number, amount: number, category: string) => {
+  const add = (
+    category: string,
+    desc: string,
+    isCode: string,
+    formula: string,
+    qty: number,
+    unit: string,
+    rate: number,
+    amount: number,
+    wastePct = 5,
+    gstPct = 18
+  ) => {
     if (qty > 0 || amount > 0) {
       items.push({
         srNo: index++,
+        category,
         description: desc,
+        isCode,
+        formula,
         quantity: Math.round(qty * 100) / 100,
         unit,
         rate: Math.round(rate * 100) / 100,
         amount: Math.round(amount),
-        category,
+        wastePct,
+        gstPct
       })
     }
   }
 
-  // 1. Structural RCC
-  add('Concrete RCC Structural Mix (slab, beam, columns, foundation)', m.concrete_volume || 0, 'm³', c.concrete_cost / (m.concrete_volume || 1), c.concrete_cost || 0, 'Structural RCC')
-  add('TMT Steel Reinforcement (high-strength reinforcing bars)', m.steel_weight || 0, 'kg', c.steel_cost / (m.steel_weight || 1), c.steel_cost || 0, 'Structural RCC')
-  add('Cement Bags (OPC 53 Grade / PPC premium brands)', m.cement_bags || 0, 'bags', c.cement_cost / (m.cement_bags || 1), c.cement_cost || 0, 'Structural RCC')
-  add('Sand coarse aggregate supply', m.sand_volume || 0, 'm³', c.sand_cost / (m.sand_volume || 1), c.sand_cost || 0, 'Structural RCC')
-  add('Stone Aggregate (10mm / 20mm coarse aggregates)', m.aggregate_volume || 0, 'm³', c.aggregate_cost / (m.aggregate_volume || 1), c.aggregate_cost || 0, 'Structural RCC')
-  add('Shuttering / Formwork area (slab, beam, column centering)', m.shuttering?.total_area_m2 || 0, 'm²', m.shuttering?.rate_per_m2 || 150, c.shuttering_cost || m.shuttering?.total_cost || 0, 'Structural RCC')
+  // 1. Earthwork
+  add('Civil & Earthwork', 'Earthwork Excavation for foundations and trenches', 'IS 1200 (Part 1)', 'V = Envelope Area × Plinth Height', m.excavation_volume || 0, 'm³', (c.excavation_cost || 1) / (m.excavation_volume || 1), c.excavation_cost || 0, 0, 18)
 
-  // 2. Masonry
+  // 2. Concrete Structural Framing
+  add('Structural RCC', 'Concrete RCC Mix (Slabs, Beams, Columns, Footings, Stairs)', 'IS 1200 (Part 2) / IS 456', 'V_RCC = V_slabs + V_columns + V_beams + V_footings', m.concrete_volume || 0, 'm³', (c.concrete_cost || 1) / (m.concrete_volume || 1), c.concrete_cost || 0, p.waste_concrete ?? 2, 18)
+  add('Structural RCC', 'TMT Steel Reinforcement Bars (Fe500/Fe550 Rebar)', 'IS 1786 / IS 2502', 'W_steel = ∑(V_member × Rebar Density kg/m³) × (1 + Waste %)', m.steel_weight || 0, 'kg', (c.steel_cost || 1) / (m.steel_weight || 1), c.steel_cost || 0, p.waste_steel ?? 3, 18)
+  add('Structural RCC', 'OPC / PPC 53 Grade Cement Bags (50kg units)', 'IS 456 / IS 10262', 'Bags = ⌈(Dry Mortar Vol ÷ 0.0347) + (Dry RCC Vol × Cement Ratio ÷ 0.0347)⌉', m.cement_bags || 0, 'bags', (c.cement_cost || 1) / (m.cement_bags || 1), c.cement_cost || 0, 5, 18)
+  add('Structural RCC', 'Coarse River Sand / M-Sand Aggregate', 'IS 383', 'Vol = Mortar Vol × Sand Ratio × 1.20 Bulking Factor', m.sand_volume || 0, 'm³', (c.sand_cost || 1) / (m.sand_volume || 1), c.sand_cost || 0, 5, 18)
+  add('Structural RCC', 'Graded Stone Aggregate (10mm / 20mm)', 'IS 383', 'Vol = RCC Concrete Vol × Agg Mix Fraction', m.aggregate_volume || 0, 'm³', (c.aggregate_cost || 1) / (m.aggregate_volume || 1), c.aggregate_cost || 0, 5, 18)
+
+  // 3. Masonry
   const brickQty = m.bricks_count || m.blocks_count || 0
   const brickUnit = m.bricks_count ? 'nos' : 'nos (AAC)'
-  const brickRate = m.bricks_count ? (c.brick_cost / (m.bricks_count || 1)) : (c.block_cost / (m.blocks_count || 1))
-  const brickCost = c.brick_cost || c.block_cost || 0
-  add('Masonry brickwork wall units', brickQty, brickUnit, brickRate, brickCost, 'Masonry & Partition')
-  add('Mortar wet mix for brickwork jointing', m.mortar_volume || 0, 'm³', c.mortar_cost / (m.mortar_volume || 1), c.mortar_cost || 0, 'Masonry & Partition')
-
-  // 3. MEP (Plumbing & Electrical)
-  add('Internal & External Plumbing Piping network (water/drainage)', 1, 'L.S.', c.plumbing_cost || 0, c.plumbing_cost || 0, 'Plumbing & Sanitary')
-  add('Electrical Wiring, Switches, MCBs, DB infrastructure', 1, 'L.S.', c.electrical_cost || 0, c.electrical_cost || 0, 'Electrical & Fittings')
+  const isAAC = p.brick_type === 'aac_block'
+  add('Masonry & Partition', isAAC ? 'AAC Light Wall Blocks (600×200×200mm)' : 'Burnt Red Clay Brickwork (230×110×75mm)', 'IS 1200 (Part 3) / IS 2212', 'Count = Net Wall Vol (m³) ÷ Unit Volume with Mortar Joint', brickQty, brickUnit, (isAAC ? c.block_cost : c.brick_cost) / (brickQty || 1), isAAC ? c.block_cost : c.brick_cost, p.waste_brick ?? 5, 18)
 
   // 4. Finishes
-  add('Mortar Plaster Wall Finish (internal/external double coat)', m.plaster_area || 0, 'm²', c.plaster_cost / (m.plaster_area || 1), c.plaster_cost || 0, 'Finishes & Paint')
-  add('Wall Premium Decorative Painting (primer/putty/emulsion)', m.paint_area || 0, 'm²', c.paint_cost / (m.paint_area || 1), c.paint_cost || 0, 'Finishes & Paint')
-  add('Flooring Tiles (ceramic/vitrified flooring with adhesive/grout)', m.tiles_area || 0, 'm²', c.tiles_cost / (m.tiles_area || 1), c.tiles_cost || 0, 'Finishes & Paint')
-  add('Waterproofing Barrier Layer chemical coat (terrace/bathroom)', m.waterproofing_area || 0, 'm²', c.waterproofing_cost / (m.waterproofing_area || 1), c.waterproofing_cost || 0, 'Finishes & Paint')
+  add('Finishes & Plaster', 'Internal (12mm) & External (20mm) Cement Plaster', 'IS 1200 (Part 12) / IS 1661', 'Area = Wall Surface Faces - Opening Deductions', m.plaster_area || 0, 'm²', (c.plaster_cost || 1) / (m.plaster_area || 1), c.plaster_cost || 0, p.waste_plaster ?? 5, 18)
+  add('Finishes & Plaster', 'Double Coat Decorative Paint (Primer + Emulsion)', 'IS 1200 (Part 13)', 'Area = Plastered Wall Surface Area', m.paint_area || 0, 'm²', (c.paint_cost || 1) / (m.paint_area || 1), c.paint_cost || 0, p.waste_paint ?? 10, 18)
+  add('Finishes & Plaster', 'Vitrified Flooring Tiles (600×600mm / 2×2 ft)', 'IS 1200 (Part 11) / IS 15622', 'Boxes = ⌈(Carpet Area ÷ Box Coverage) × (1 + Waste %)⌉', m.tiles_area || 0, 'm²', (c.tiles_cost || 1) / (m.tiles_area || 1), c.tiles_cost || 0, p.waste_tiles ?? 8, 18)
 
-  // 5. Openings & Earthwork
-  const doorsCount = m.doors_count ?? m.doors?.total_count ?? 0
-  const doorCost = c.door_cost ?? (doorsCount * 4500)
-  const windowsCount = m.windows_count ?? m.windows?.total_count ?? 0
-  const windowCost = c.window_cost ?? (windowsCount * 3500)
-
-  add('Earthwork Excavation for isolated/raft foundations', m.excavation_volume || 0, 'm³', c.excavation_cost / (m.excavation_volume || 1), c.excavation_cost || 0, 'Civil & Earthwork')
-  add('Premium Doors with Teakwood/Plywood frames', doorsCount, 'nos', doorCost / (doorsCount || 1), doorCost, 'Openings & Carpentry')
-  add('Aluminium sliding / UPVC Windows with glass paneling', windowsCount, 'nos', windowCost / (windowsCount || 1), windowCost, 'Openings & Carpentry')
+  // 5. Openings
+  const doorsCount = m.doors_count || 0
+  const windowsCount = m.windows_count || 0
+  add('Openings', 'Wooden Flush Doors with Frame & Fittings', 'IS 1200 (Part 8)', 'Count = Detected Door Openings', doorsCount, 'nos', 4500, doorsCount * 4500, 0, 18)
+  add('Openings', 'Aluminium / UPVC Glazed Sliding Windows', 'IS 1200 (Part 8)', 'Count = Detected Window Openings', windowsCount, 'nos', 3500, windowsCount * 3500, 0, 18)
 
   return items
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// EXPORT TO EXCEL
+// MULTI-TAB EXCEL WORKBOOK EXPORT (IS 1200 AUDIT READY)
 // ══════════════════════════════════════════════════════════════════════════════
 
 export function exportToExcel(estimation: any, projectName: string) {
   const items = generateBOQItems(estimation)
   const c = estimation.cost_breakdown || estimation.cost || {}
-  
-  // Format items for spreadsheet
-  const rows = items.map(item => ({
-    'Sr No': item.srNo,
-    'Component Category': item.category,
+  const audits = estimation.calculation_audits || []
+  const rooms = estimation.room_takeoffs || []
+
+  const workbook = XLSX.utils.book_new()
+
+  // Sheet 1: Project Metadata & Summary
+  const summaryData = [
+    ['BUILDWISE AI — EXECUTIVE BOQ ESTIMATION REPORT'],
+    ['Project Name', projectName],
+    ['Project ID', estimation.project_id || estimation.id],
+    ['Generated Date', new Date().toLocaleDateString()],
+    ['IS Code Standard', 'IS 1200 / IS 456 / IS 1786'],
+    ['Software Version', 'BuildWise AI Enterprise 2.5'],
+    [],
+    ['COST SUMMARY BREAKDOWN'],
+    ['Direct Material Cost', c.total_material_cost || 0],
+    ['Direct Craft Labour Wages', c.labour_cost || 0],
+    ['Equipment & Machinery Rentals', c.equipment_cost || 0],
+    ['Contractor Overheads & Margin', c.contractor_margin || 0],
+    ['Contingency Buffer', c.contingency || 0],
+    ['GST Tax Amount (18%)', c.gst_amount || 0],
+    ['GRAND TOTAL PROJECT COST', c.grand_total || estimation.total_cost || 0]
+  ]
+  const sheetSummary = XLSX.utils.aoa_to_sheet(summaryData)
+  XLSX.utils.book_append_sheet(workbook, sheetSummary, 'Executive Summary')
+
+  // Sheet 2: IS 1200 BOQ
+  const boqRows = items.map(item => ({
+    'Item #': item.srNo,
+    'Category': item.category,
     'Item Description': item.description,
-    'Estimated Quantity': item.quantity,
-    'Measurement Unit': item.unit,
+    'IS Code Reference': item.isCode,
+    'Formula Used': item.formula,
+    'Quantity': item.quantity,
+    'Unit': item.unit,
     'Unit Rate (INR)': item.rate,
     'Total Amount (INR)': item.amount,
+    'Waste %': item.wastePct,
+    'GST %': item.gstPct
   }))
+  const sheetBOQ = XLSX.utils.json_to_sheet(boqRows)
+  XLSX.utils.book_append_sheet(workbook, sheetBOQ, 'IS 1200 BOQ')
 
-  const worksheet = XLSX.utils.json_to_sheet(rows)
-  const workbook = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Bill of Quantities')
+  // Sheet 3: Room Takeoffs
+  const roomRows = rooms.map((r: any) => ({
+    'Room Name': r.label,
+    'Carpet Area (m²)': r.area_m2,
+    'Perimeter (m)': r.perimeter_m,
+    'Wall Surface Area (m²)': r.wall_area_m2,
+    'Floor Tiles Boxes': r.flooring_tile_boxes,
+    'Paint Volume (Ltrs)': r.paint_liters,
+    'Total Room Cost (INR)': r.total_cost
+  }))
+  const sheetRooms = XLSX.utils.json_to_sheet(roomRows)
+  XLSX.utils.book_append_sheet(workbook, sheetRooms, 'Room Takeoffs')
 
-  // Add summaries to the end
-  const nextRowIndex = rows.length + 3
-  XLSX.utils.sheet_add_aoa(worksheet, [
-    ['Total Material Cost:', '', '', '', '', '', c.total_material_cost || 0],
-    ['Craft Labour Cost:', '', '', '', '', '', c.labour_cost || 0],
-    ['Machinery & Equipments:', '', '', '', '', '', c.equipment_cost || 0],
-    ['Contractor Overheads/Margin:', '', '', '', '', '', c.contractor_margin || 0],
-    ['Contingency Buffer:', '', '', '', '', '', c.contingency || 0],
-    ['GST Rate Buffer (18%):', '', '', '', '', '', c.gst_amount || 0],
-    ['Grand Total Estimate:', '', '', '', '', '', c.grand_total || estimation.total_cost || 0]
-  ], { origin: `A${nextRowIndex}` })
+  // Sheet 4: Calculation Audits
+  const auditRows = audits.map((a: any) => ({
+    'Item ID': a.item_id,
+    'Item Name': a.item_name,
+    'Category': a.category,
+    'IS Code': a.is_code_reference,
+    'Formula': a.formula,
+    'Derivation Steps': (a.intermediate_steps || []).join(' | '),
+    'Final Value': a.final_value,
+    'Unit': a.unit,
+    'Confidence Score': `${Math.round(a.confidence * 100)}%`
+  }))
+  const sheetAudits = XLSX.utils.json_to_sheet(auditRows)
+  XLSX.utils.book_append_sheet(workbook, sheetAudits, 'Calculation Audits')
 
   const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
   const blob = new Blob([excelBuffer], { type: 'application/octet-stream' })
@@ -122,14 +176,15 @@ export function exportToCSV(estimation: any, projectName: string) {
   const c = estimation.cost_breakdown || estimation.cost || {}
 
   const csvRows = [
-    ['Sr No', 'Category', 'Description', 'Quantity', 'Unit', 'Rate', 'Amount'],
-    ...items.map(i => [i.srNo, i.category, i.description, i.quantity, i.unit, i.rate, i.amount]),
+    ['Sr No', 'Category', 'Description', 'IS Code', 'Formula', 'Quantity', 'Unit', 'Rate', 'Amount'],
+    ...items.map(i => [i.srNo, i.category, i.description, i.isCode, i.formula, i.quantity, i.unit, i.rate, i.amount]),
     [],
-    ['Total Material Cost', '', '', '', '', '', c.total_material_cost || 0],
-    ['Labour Cost', '', '', '', '', '', c.labour_cost || 0],
-    ['Equipment Cost', '', '', '', '', '', c.equipment_cost || 0],
-    ['GST 18%', '', '', '', '', '', c.gst_amount || 0],
-    ['Grand Total', '', '', '', '', '', c.grand_total || estimation.total_cost || 0]
+    ['Total Material Cost', '', '', '', '', '', '', '', c.total_material_cost || 0],
+    ['Labour Cost', '', '', '', '', '', '', '', c.labour_cost || 0],
+    ['Equipment Cost', '', '', '', '', '', '', '', c.equipment_cost || 0],
+    ['Contractor Margin', '', '', '', '', '', '', '', c.contractor_margin || 0],
+    ['GST 18%', '', '', '', '', '', '', '', c.gst_amount || 0],
+    ['Grand Total', '', '', '', '', '', '', '', c.grand_total || estimation.total_cost || 0]
   ]
 
   const csvContent = csvRows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -138,33 +193,35 @@ export function exportToCSV(estimation: any, projectName: string) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// EXPORT TO PDF
+// EXPORT TO PROFESSIONAL PDF (WITH DIGITAL SIGNATURE BLOCK)
 // ══════════════════════════════════════════════════════════════════════════════
 
 export function exportToPDF(estimation: any, projectName: string) {
   const doc = new jsPDF()
   const items = generateBOQItems(estimation)
   const c = estimation.cost_breakdown || estimation.cost || {}
+  const audits = estimation.calculation_audits || []
 
   // Header styling
   doc.setFontSize(20)
   doc.setTextColor(124, 58, 237) // violet-600
   doc.text('BuildWise AI', 14, 20)
-  
-  doc.setFontSize(10)
+
+  doc.setFontSize(9)
   doc.setTextColor(100, 100, 100)
-  doc.text('Enterprise Construction BOQ & Takeoff Report', 14, 25)
-  doc.text(`Project: ${projectName}`, 14, 30)
-  doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 35)
+  doc.text('Enterprise Construction BOQ & Takeoff Audit Report (IS 1200 / IS 456)', 14, 26)
+  doc.text(`Project: ${projectName} | ID: ${estimation.project_id || estimation.id}`, 14, 31)
+  doc.text(`Date: ${new Date().toLocaleDateString()} | Calculation Engine: v2.5 IS-Compliant`, 14, 36)
 
-  doc.line(14, 38, 196, 38)
+  doc.line(14, 39, 196, 39)
 
-  // Main table
-  const columns = ['Sr', 'Category', 'Description', 'Quantity', 'Unit', 'Rate', 'Amount (INR)']
+  // Table 1: BOQ Items
+  const columns = ['Sr', 'Category', 'Description', 'IS Code', 'Qty', 'Unit', 'Rate', 'Amount (INR)']
   const rows = items.map(i => [
     i.srNo,
     i.category,
     i.description,
+    i.isCode,
     i.quantity,
     i.unit,
     i.rate.toLocaleString('en-IN'),
@@ -172,50 +229,76 @@ export function exportToPDF(estimation: any, projectName: string) {
   ])
 
   autoTable(doc, {
-    startY: 42,
+    startY: 43,
     head: [columns],
     body: rows,
     theme: 'grid',
-    headStyles: { fillColor: [124, 58, 237], halign: 'left' },
+    headStyles: { fillColor: [124, 58, 237], halign: 'left', fontSize: 8 },
     columnStyles: {
-      0: { cellWidth: 10 },
-      1: { cellWidth: 30 },
-      2: { cellWidth: 60 },
-      3: { cellWidth: 20, halign: 'right' },
-      4: { cellWidth: 15 },
-      5: { cellWidth: 20, halign: 'right' },
-      6: { cellWidth: 25, halign: 'right' }
+      0: { cellWidth: 8 },
+      1: { cellWidth: 25 },
+      2: { cellWidth: 50 },
+      3: { cellWidth: 32 },
+      4: { cellWidth: 15, halign: 'right' },
+      5: { cellWidth: 12 },
+      6: { cellWidth: 18, halign: 'right' },
+      7: { cellWidth: 22, halign: 'right' }
     },
-    styles: { fontSize: 8.5 }
+    styles: { fontSize: 7.5 }
   })
 
-  // Summary layout below table
-  const finalY = (doc as any).lastAutoTable.finalY + 10
-  
+  let currentY = (doc as any).lastAutoTable.finalY + 10
+
+  // Cost Summary Block
   doc.setFontSize(10)
-  doc.setTextColor(50, 50, 50)
-  
-  let currentY = finalY
+  doc.setTextColor(40, 40, 40)
+  doc.setFont('helvetica', 'bold')
+  doc.text('COST BREAKDOWN SUMMARY', 14, currentY)
+  currentY += 6
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8.5)
+
   const addSummaryRow = (label: string, val: number) => {
-    doc.text(label, 120, currentY)
+    doc.text(label, 14, currentY)
     doc.text(`Rs. ${val.toLocaleString('en-IN')}`, 196, currentY, { align: 'right' })
-    currentY += 6
+    currentY += 5
   }
 
-  addSummaryRow('Total Material Cost:', c.total_material_cost || 0)
-  addSummaryRow('Direct Craft Labour:', c.labour_cost || 0)
-  addSummaryRow('Equipment & Machinery:', c.equipment_cost || 0)
-  addSummaryRow('Contractor Margin:', c.contractor_margin || 0)
+  addSummaryRow('Direct Material Cost:', c.total_material_cost || 0)
+  addSummaryRow('Direct Craft Labour Wages:', c.labour_cost || 0)
+  addSummaryRow('Equipment & Machinery Rentals:', c.equipment_cost || 0)
+  addSummaryRow('Contractor Margin & Overheads:', c.contractor_margin || 0)
   addSummaryRow('Contingency Buffer:', c.contingency || 0)
-  addSummaryRow('GST Buffer (18%):', c.gst_amount || 0)
-  
-  doc.line(120, currentY, 196, currentY)
+  addSummaryRow('GST Tax Amount (18%):', c.gst_amount || 0)
+
+  doc.line(14, currentY, 196, currentY)
   currentY += 6
-  
+
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(11)
-  doc.text('GRAND TOTAL BOQ:', 120, currentY)
+  doc.setTextColor(124, 58, 237)
+  doc.text('GRAND TOTAL ESTIMATE:', 14, currentY)
   doc.text(`Rs. ${(c.grand_total || estimation.total_cost || 0).toLocaleString('en-IN')}`, 196, currentY, { align: 'right' })
+
+  // Digital Signatures Block
+  currentY += 16
+  doc.setFontSize(8.5)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(100, 100, 100)
+  doc.text('DIGITAL SIGN-OFF & VERIFICATION STAMP', 14, currentY)
+  currentY += 12
+
+  doc.line(14, currentY, 60, currentY)
+  doc.line(80, currentY, 126, currentY)
+  doc.line(146, currentY, 196, currentY)
+
+  currentY += 4
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(7.5)
+  doc.text('Prepared By: Quantity Surveyor', 14, currentY)
+  doc.text('Checked By: Structural Engineer', 80, currentY)
+  doc.text('Approved By: Client / Contractor', 146, currentY)
 
   doc.save(`BOQ_Report_${projectName.replace(/\s+/g, '_')}.pdf`)
 }

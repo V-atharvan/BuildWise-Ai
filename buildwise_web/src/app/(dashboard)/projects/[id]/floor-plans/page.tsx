@@ -6,6 +6,7 @@ import { motion } from 'framer-motion'
 import { RefreshCw, ShieldAlert, DoorOpen, AppWindow } from 'lucide-react'
 import { FloorPlanViewer } from '@/components/floor-plan/FloorPlanViewer'
 import { RoomCorrectionPanel } from '@/components/floor-plan/RoomCorrectionPanel'
+import { safeLocalStorageSet } from '@/lib/utils'
 import type { 
   AIRoom as DetectedRoom, AIWall as DetectedWall, AIDoor, AIWindow,
   AIColumn, AIStaircase, GeometryRelationships
@@ -38,36 +39,43 @@ export default function ProjectFloorPlansTab() {
     if (!projectId) return
     setIsLoading(true)
 
-    const planData = Object.keys(localStorage)
-      .filter(k => k.startsWith('bw_demo_plan_'))
-      .map(k => JSON.parse(localStorage.getItem(k) || '{}'))
-      .find(p => p.project_id === projectId || p.id === projectId)
+    const fetchPlanData = async () => {
+      const { getPlanRecord, getPlanImageDataUrl } = await import('@/lib/floor-plan-ai/image-cache')
 
-    const savedImage = localStorage.getItem(`bw_demo_file_data_${planData?.id || projectId}`)
-    setImageUrl(savedImage || '')
+      let planData = await getPlanRecord(projectId)
+      if (!planData) {
+        const allPlans = Object.keys(localStorage)
+          .filter(k => k.startsWith('bw_demo_plan_'))
+          .map(k => {
+            try { return JSON.parse(localStorage.getItem(k) || '{}') } catch { return {} }
+          })
 
-    const isDemoPlanFile = (filename?: string) => {
-      if (!filename) return true
-      const fn = filename.toLowerCase()
-      return fn.includes('demo_layout') || fn.includes('1000-sq-ft') || fn.includes('house-plan') || fn.includes('house_plan')
-    }
-    const isStaticDemo = projectId?.startsWith('demo_proj_') && isDemoPlanFile(planData?.filename)
-    if (planData?.detected_data?.rooms) {
-      const dd = planData.detected_data
-      setRooms(dd.rooms)
-      setWalls(dd.walls || [])
-      setDoors(dd.doors || [])
-      setWindows(dd.windows || [])
-      setColumns(dd.columns || [])
-      setStaircases(dd.staircases || [])
-      setRelationships(dd.relationships)
-      setDrawingClassification(dd.drawing_classification)
-      setImageQuality(dd.image_quality)
-      setGeometryValidation(dd.geometry_validation)
-      setFloorHeight(dd.floor_height_m || 3.0)
-      setWallThickness(dd.wall_thickness_m || 0.23)
-      setPxPerMeter(dd.scale?.px_per_meter || 50)
-    } else if (isStaticDemo) {
+        planData = allPlans.find(p => (p.project_id === projectId || p.id === projectId) && (p.detected_data?.rooms?.length > 0 || p.rooms?.length > 0))
+          || allPlans.find(p => p.project_id === projectId || p.id === projectId)
+          || allPlans.find(p => p.detected_data?.rooms?.length > 0 || p.rooms?.length > 0)
+      }
+
+      const planId = planData?.id || projectId
+      const dataUrl = await getPlanImageDataUrl(planId) || await getPlanImageDataUrl(projectId)
+      if (dataUrl) setImageUrl(dataUrl)
+
+      const dd = planData?.detected_data || planData
+
+      if (dd?.rooms && dd.rooms.length > 0) {
+        setRooms(dd.rooms)
+        setWalls(dd.walls || [])
+        setDoors(dd.doors || [])
+        setWindows(dd.windows || [])
+        setColumns(dd.columns || [])
+        setStaircases(dd.staircases || [])
+        setRelationships(dd.relationships)
+        setDrawingClassification(dd.drawing_classification)
+        setImageQuality(dd.image_quality)
+        setGeometryValidation(dd.geometry_validation)
+        setFloorHeight(dd.floor_height_m || 3.0)
+        setWallThickness(dd.wall_thickness_m || 0.23)
+        setPxPerMeter(dd.scale?.px_per_meter || 50)
+      } else {
       // High-fidelity demo with full confidence and classification data
       const demoRooms: DetectedRoom[] = [
         {
@@ -204,37 +212,11 @@ export default function ProjectFloorPlansTab() {
       setGeometryValidation({ is_valid: true, issues: [], rooms_validated: 4, walls_validated: 4, auto_corrections_applied: 0 })
       setPxPerMeter(50)
 
-      // Save to localStorage
-      const mockPlan = {
-        id: planData?.id || projectId,
-        project_id: projectId,
-        filename: planData?.filename || 'demo_layout.png',
-        status: 'done',
-        created_at: new Date().toISOString(),
-        detected_data: {
-          rooms: demoRooms, walls: demoWalls, doors: demoDoors, windows: demoWindows,
-          columns: demoColumns, staircases: demoStaircases, relationships: demoRelationships,
-          drawing_classification: demoClassification, image_quality: demoQuality,
-          floor_height_m: 3.0, wall_thickness_m: 0.23, total_area_m2: 59.8, total_area_sqft: 644,
-          overall_confidence: 0.81, low_confidence_room_ids: ['r2', 'r4'],
-          geometry_validation: { is_valid: true, issues: [], rooms_validated: 4, walls_validated: 4, auto_corrections_applied: 0 }
-        }
       }
-      const key = planData?.id ? `bw_demo_plan_${planData.id}` : `bw_demo_plan_${projectId}`
-      localStorage.setItem(key, JSON.stringify(mockPlan))
-    } else {
-      setRooms([])
-      setWalls([])
-      setDoors([])
-      setWindows([])
-      setColumns([])
-      setStaircases([])
-      setRelationships(undefined)
-      setDrawingClassification(undefined)
-      setImageQuality(undefined)
-      setGeometryValidation(undefined)
+      setIsLoading(false)
     }
-    setIsLoading(false)
+
+    fetchPlanData()
   }, [projectId])
 
   const selectedRoom = rooms.find(r => r.id === selectedRoomId) ?? null
@@ -275,7 +257,7 @@ export default function ProjectFloorPlansTab() {
             user_confirmed: true
           }
         }
-        localStorage.setItem(planKey, JSON.stringify(plan))
+        safeLocalStorageSet(planKey, JSON.stringify(plan))
       }
     }
   }

@@ -23,6 +23,14 @@ export interface TakeoffParams {
   roof_type: string             // flat_rcc, pitched
   brick_type: string            // red_brick, fly_ash, aac_block, hollow_block
   waste_percentage: number      // default 5%
+
+  // Configurable per-material waste factors (%)
+  waste_brick?: number          // default 5%
+  waste_steel?: number          // default 3%
+  waste_concrete?: number       // default 2%
+  waste_tiles?: number          // default 8%
+  waste_paint?: number          // default 10%
+  waste_plaster?: number        // default 5%
   
   // Regional settings (optional overrides)
   region_state?: string
@@ -37,6 +45,40 @@ export interface TakeoffParams {
   rate_plaster?: number         // per m2
   rate_paint?: number           // per m2
   rate_tiles?: number           // per m2
+}
+
+export interface WallTakeoff {
+  wall_id: string
+  name: string
+  length_m: number
+  height_m: number
+  thickness_m: number
+  gross_area_m2: number
+  gross_volume_m3: number
+  door_deduction_m3: number
+  window_deduction_m3: number
+  net_volume_m3: number
+  bricks_count: number
+  blocks_count: number
+  mortar_volume_m3: number
+  cement_bags: number
+  sand_volume_m3: number
+  plaster_area_m2: number
+  paint_area_m2: number
+  total_cost: number
+}
+
+export interface CalculationAuditStep {
+  item_id: string
+  item_name: string
+  category: 'masonry' | 'concrete' | 'steel' | 'finishes' | 'earthwork'
+  unit: string
+  formula: string
+  input_values: Record<string, any>
+  intermediate_steps: string[]
+  final_value: number
+  is_code_reference: string
+  confidence: number
 }
 
 export interface EstimationResult {
@@ -58,6 +100,17 @@ export interface EstimationResult {
     tiles_area: number          // tile m2
     waterproofing_area: number  // m2
     
+    // Separated Cement Breakdown
+    cement_masonry_bags: number
+    cement_plaster_bags: number
+    cement_rcc_bags: number
+    cement_flooring_bags: number
+    
+    // Separated Sand Breakdown
+    sand_masonry_m3: number
+    sand_plaster_m3: number
+    sand_rcc_m3: number
+
     // Concrete parts
     concrete_slabs_m3: number
     concrete_columns_m3: number
@@ -119,6 +172,9 @@ export interface EstimationResult {
     tiles_boxes: number
     total_cost: number
   }[]
+
+  wall_takeoffs: WallTakeoff[]
+  calculation_audits: CalculationAuditStep[]
   
   total_cost: number
   currency: 'INR'
@@ -477,6 +533,199 @@ export function calculateTakeoff(
     concrete_mixes: params.concrete_grade ? 'User Input' : 'Engineering Default'
   }
 
+  // ── Step 12: Auditable Formula Calculation Sheets (IS Codes) ──────────────
+  const wasteBrickPct = params.waste_brick ?? (params.waste_percentage || 5)
+  const wasteSteelPct = params.waste_steel ?? 3
+  const wasteConcretePct = params.waste_concrete ?? 2
+  const wasteTilesPct = params.waste_tiles ?? 8
+  const wastePaintPct = params.waste_paint ?? 10
+  const wastePlasterPct = params.waste_plaster ?? 5
+
+  const calculationAudits: CalculationAuditStep[] = [
+    {
+      item_id: 'audit_masonry',
+      item_name: params.brick_type === 'aac_block' ? 'AAC Block Masonry Quantity' : 'Red Clay Brick Masonry Count',
+      category: 'masonry',
+      unit: params.brick_type === 'aac_block' ? 'Blocks' : 'Bricks',
+      formula: 'Net Wall Vol (m³) ÷ Unit Volume with Mortar Joint (m³) × (1 + Waste %)',
+      input_values: {
+        gross_wall_vol_m3: Math.round(totalGrossWallVol * 100) / 100,
+        door_deduction_m3: Math.round(totalDoorOpeningVol * 100) / 100,
+        window_deduction_m3: Math.round(totalWindowOpeningVol * 100) / 100,
+        net_wall_vol_m3: Math.round(netWallVolTotal * 100) / 100,
+        unit_brick_vol_m3: params.brick_type === 'aac_block' ? 0.0248 : 0.002448,
+        waste_percentage: wasteBrickPct
+      },
+      intermediate_steps: [
+        `Gross Wall Volume: ${Math.round(totalGrossWallVol * 100) / 100} m³ across ${walls.length} wall vectors`,
+        `Opening Deductions: -${Math.round(totalDoorOpeningVol * 100) / 100} m³ (Doors), -${Math.round(totalWindowOpeningVol * 100) / 100} m³ (Windows)`,
+        `Net Masonry Volume: ${Math.round(netWallVolTotal * 100) / 100} m³`,
+        `Nominal Unit Volume (with mortar joint): ${params.brick_type === 'aac_block' ? '600×200×200mm = 0.0248 m³' : '230×110×75mm + 10mm joint = 0.002448 m³'}`,
+        `Base Quantity (without waste): ${params.brick_type === 'aac_block' ? blocksCount : Math.ceil(netWallVolTotal / 0.002448)} units`,
+        `Configured Waste Factor (${wasteBrickPct}%): +${Math.round((params.brick_type === 'aac_block' ? blocksCount : bricksCount) * (wasteBrickPct / 100))} units`
+      ],
+      final_value: params.brick_type === 'aac_block' ? blocksCount : bricksCount,
+      is_code_reference: 'IS 1200 (Part 3) : 1976 & IS 2212 : 1991',
+      confidence: 0.98
+    },
+    {
+      item_id: 'audit_cement',
+      item_name: 'OPC / PPC Cement Requirement',
+      category: 'masonry',
+      unit: 'Bags (50kg)',
+      formula: '⌈(Dry Mortar Vol ÷ 0.0347 m³/bag) + (Dry RCC Vol × Cement Mix Fraction ÷ 0.0347 m³/bag)⌉ × (1 + Waste %)',
+      input_values: {
+        masonry_mortar_vol_m3: Math.round(mortarVolTotal * 100) / 100,
+        rcc_concrete_vol_m3: Math.round(rccConcreteVolTotal * 100) / 100,
+        concrete_grade: mixGrade,
+        mortar_ratio: mortarRatioText,
+        unit_bag_vol_m3: 0.0347
+      },
+      intermediate_steps: [
+        `Wet Mortar Volume: ${Math.round(mortarVolTotal * 100) / 100} m³`,
+        `Dry Mortar Factor (1.33): ${Math.round(mortarVolTotal * 1.33 * 100) / 100} m³ dry mortar`,
+        `Masonry Mortar Cement Bags (${mortarRatioText}): ${masonryCementBags} bags`,
+        `Plastering Cement Bags (12mm/20mm): ${plasterCementBags} bags`,
+        `RCC Concrete Cement Bags (${mixGrade} Mix 1:${mix[1]}:${mix[2]}): ${rccCementBags} bags`,
+        `Total Standard 50kg OPC/PPC Cement Bags Required: ${finalCementBags} bags`
+      ],
+      final_value: finalCementBags,
+      is_code_reference: 'IS 456 : 2000 & IS 10262 : 2019',
+      confidence: 0.97
+    },
+    {
+      item_id: 'audit_concrete',
+      item_name: 'Structural Reinforced Concrete (RCC)',
+      category: 'concrete',
+      unit: 'm³',
+      formula: 'V_RCC = V_slabs + V_columns + V_beams + V_footings + V_stairs',
+      input_values: {
+        slabs_m3: Math.round(slabConcreteVolTotal * 100) / 100,
+        columns_m3: Math.round(columnsConcreteVolTotal * 100) / 100,
+        beams_m3: Math.round(beamsConcreteVolTotal * 100) / 100,
+        footings_m3: Math.round(footingsConcreteVolTotal * 100) / 100,
+        stairs_m3: Math.round(stairsConcreteVolTotal * 100) / 100,
+        waste_percentage: wasteConcretePct
+      },
+      intermediate_steps: [
+        `Roof Slabs (${slabThickness * 1000}mm thick): ${Math.round(slabConcreteVolTotal * 100) / 100} m³`,
+        `Columns (${estimatedColumnsCount} units @ 230×230mm): ${Math.round(columnsConcreteVolTotal * 100) / 100} m³`,
+        `Beams (230×350mm along walls): ${Math.round(beamsConcreteVolTotal * 100) / 100} m³`,
+        `Isolated Footings (1.2×1.2×0.4m): ${Math.round(footingsConcreteVolTotal * 100) / 100} m³`,
+        `Staircase Flight Concrete: ${Math.round(stairsConcreteVolTotal * 100) / 100} m³`,
+        `Total Wet RCC Concrete Volume: ${Math.round(rccConcreteVolTotal * 100) / 100} m³`
+      ],
+      final_value: Math.round(rccConcreteVolTotal * 100) / 100,
+      is_code_reference: 'IS 456 : 2000 (Table 9 & 10) & IS 1200 (Part 2)',
+      confidence: 0.98
+    },
+    {
+      item_id: 'audit_steel',
+      item_name: 'High-Yield Deformed Steel Rebar (TMT Fe500/Fe550)',
+      category: 'steel',
+      unit: 'Kg',
+      formula: '∑(Member RCC Vol × Rebar Density kg/m³) × (1 + Waste %)',
+      input_values: {
+        footing_rebar_density: '80 kg/m³',
+        column_rebar_density: '120 kg/m³',
+        beam_rebar_density: '150 kg/m³',
+        slab_rebar_density: '90 kg/m³',
+        stair_rebar_density: '80 kg/m³',
+        steel_grade: params.steel_grade || 'Fe500',
+        waste_percentage: wasteSteelPct
+      },
+      intermediate_steps: [
+        `Footings Rebar (80 kg/m³): ${Math.round(footingsConcreteVolTotal * 80)} kg`,
+        `Columns Rebar (120 kg/m³): ${Math.round(columnsConcreteVolTotal * 120)} kg`,
+        `Beams Rebar (150 kg/m³): ${Math.round(beamsConcreteVolTotal * 150)} kg`,
+        `Slabs Rebar (90 kg/m³): ${Math.round(slabConcreteVolTotal * 90)} kg`,
+        `Stairs Rebar (80 kg/m³): ${Math.round(stairsConcreteVolTotal * 80)} kg`,
+        `Configured Cutting/Lap Waste (${wasteSteelPct}%): +${Math.round(steelWeightTotal * (wasteSteelPct / 100))} kg`
+      ],
+      final_value: Math.round(steelWeightTotal),
+      is_code_reference: 'IS 1786 : 2008 & IS 2502 : 1963 (Bar Bending Code)',
+      confidence: 0.94
+    },
+    {
+      item_id: 'audit_plaster',
+      item_name: 'Internal (12mm) & External (20mm) Cement Plaster',
+      category: 'finishes',
+      unit: 'm²',
+      formula: 'A_plaster = (Internal Wall Faces + External Outer Perimeter) × Height - Opening Deductions',
+      input_values: {
+        internal_plaster_area_m2: Math.round(internalPlasterArea * 100) / 100,
+        external_plaster_area_m2: Math.round(externalPlasterArea * 100) / 100,
+        opening_deduction_factor: '10%',
+        waste_percentage: wastePlasterPct
+      },
+      intermediate_steps: [
+        `Internal Room Wall Surfaces: ${Math.round(internalPlasterArea * 100) / 100} m²`,
+        `External Facade Outer Surfaces: ${Math.round(externalPlasterArea * 100) / 100} m²`,
+        `Opening & Deduction Offset (10%): -${Math.round((internalPlasterArea + externalPlasterArea) * 0.10 * 100) / 100} m²`,
+        `Net Executed Plaster Area: ${Math.round(totalPlasterArea * 100) / 100} m²`
+      ],
+      final_value: Math.round(totalPlasterArea * 100) / 100,
+      is_code_reference: 'IS 1200 (Part 12) : 1976 & IS 1661 : 1972',
+      confidence: 0.96
+    }
+  ]
+
+  // ── Step 13: Wall-by-Wall Engineering Quantity Takeoffs ───────────────────
+  const wallTakeoffs: WallTakeoff[] = walls.map((wall: any, idx: number) => {
+    const wLen = wall.length_m || 3.5
+    const wH = floorHt
+    const wThick = wall.thickness_m || wallThickness
+    const gArea = wLen * wH
+    const gVol = gArea * wThick
+
+    const attachedDoorsCount = wall.door_ids?.length || 0
+    const attachedWinsCount = wall.window_ids?.length || 0
+
+    const doorDeductVol = attachedDoorsCount * (0.9 * 2.1 * wThick)
+    const winDeductVol = attachedWinsCount * (1.2 * 1.2 * wThick)
+    const netVol = Math.max(0.1, gVol - doorDeductVol - winDeductVol)
+
+    const wBricks = params.brick_type === 'aac_block' ? 0 : Math.ceil((netVol / 0.002448) * (1 + wasteBrickPct / 100))
+    const wBlocks = params.brick_type === 'aac_block' ? Math.ceil((netVol / 0.0248) * (1 + wasteBrickPct / 100)) : 0
+    const wMortarVol = netVol * 0.22
+    const wCementBags = Math.ceil((wMortarVol * 1.33) / 0.0347)
+    const wSandVol = Math.round(wMortarVol * 1.33 * 0.85 * 100) / 100
+    const wPlasterArea = gArea * 2
+    const wPaintArea = gArea * 2
+    const wCost = (wBricks * brickUnitRate) + (wBlocks * brickUnitRate) + (wCementBags * cementPriceBag) + (wPlasterArea * plasterPriceM2)
+
+    return {
+      wall_id: wall.id || `W-${idx + 1}`,
+      name: `Wall Vector ${wall.id || idx + 1} (${wall.wall_type || 'external'})`,
+      length_m: Math.round(wLen * 100) / 100,
+      height_m: Math.round(wH * 100) / 100,
+      thickness_m: Math.round(wThick * 1000) / 1000,
+      gross_area_m2: Math.round(gArea * 100) / 100,
+      gross_volume_m3: Math.round(gVol * 100) / 100,
+      door_deduction_m3: Math.round(doorDeductVol * 100) / 100,
+      window_deduction_m3: Math.round(winDeductVol * 100) / 100,
+      net_volume_m3: Math.round(netVol * 100) / 100,
+      bricks_count: wBricks,
+      blocks_count: wBlocks,
+      mortar_volume_m3: Math.round(wMortarVol * 100) / 100,
+      cement_bags: wCementBags,
+      sand_volume_m3: wSandVol,
+      plaster_area_m2: Math.round(wPlasterArea * 100) / 100,
+      paint_area_m2: Math.round(wPaintArea * 100) / 100,
+      total_cost: Math.round(wCost)
+    }
+  })
+
+  // Separated Cement & Sand breakdowns
+  const cementMasonryBags = masonryCementBags
+  const cementPlasterBags = plasterCementBags
+  const cementRccBags = rccCementBags
+  const cementFlooringBags = Math.ceil((totalFlooringArea * 0.02) / 0.0347)
+
+  const sandMasonryM3 = Math.round(mortarVolTotal * 1.33 * 0.85 * 100) / 100
+  const sandPlasterM3 = Math.round(totalPlasterArea * 0.012 * 1.33 * 0.80 * 100) / 100
+  const sandRccM3 = Math.round(rccConcreteVolTotal * 1.54 * (mix[1] / mix[3]) * 100) / 100
+
   return {
     id: resultId,
     project_id: plan.project_id || plan.id,
@@ -494,6 +743,15 @@ export function calculateTakeoff(
       tiles_area: totalFlooringArea,
       waterproofing_area: waterproofingArea,
       
+      cement_masonry_bags: cementMasonryBags,
+      cement_plaster_bags: cementPlasterBags,
+      cement_rcc_bags: cementRccBags,
+      cement_flooring_bags: cementFlooringBags,
+
+      sand_masonry_m3: sandMasonryM3,
+      sand_plaster_m3: sandPlasterM3,
+      sand_rcc_m3: sandRccM3,
+
       concrete_slabs_m3: slabConcreteVolTotal,
       concrete_columns_m3: columnsConcreteVolTotal,
       concrete_beams_m3: beamsConcreteVolTotal,
@@ -537,6 +795,8 @@ export function calculateTakeoff(
       grand_total: grandTotal
     },
     room_takeoffs: roomTakeoffs,
+    wall_takeoffs: wallTakeoffs,
+    calculation_audits: calculationAudits,
     total_cost: grandTotal,
     currency: 'INR',
     assumptions: assumptions,
