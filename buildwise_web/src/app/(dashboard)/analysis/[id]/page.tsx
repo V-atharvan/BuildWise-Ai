@@ -18,6 +18,7 @@ import type { PipelineStep, FloorPlanAnalysisResult } from '@/lib/floor-plan-ai/
 import { calculateTakeoff } from '@/lib/estimation-engine'
 import { validateFloorPlanGeometry } from '@/lib/floor-plan-ai/validation-engine'
 import { calculateProjectConfidence } from '@/lib/floor-plan-ai/confidence-engine'
+import FloorPlanEditor2D from '@/components/floor-plan/FloorPlanEditor2D'
 
 // ── Step icon mapping ────────────────────────────────────────────────────────
 const STEP_ICONS: Record<string, React.ReactNode> = {
@@ -35,25 +36,30 @@ const STEP_ICONS: Record<string, React.ReactNode> = {
 }
 
 // ── Local demo calculation (no backend) ─────────────────────────────────────
-function runDemoCalculation(params: Record<string, any>, projectId: string, router: ReturnType<typeof useRouter>) {
-  // Load plan geometry from localStorage
-  let planData: any = null
-  try {
-    const keys = Object.keys(localStorage)
-    const planKey = keys.find(k => 
-      k.startsWith('bw_demo_plan_') && 
-      (k.endsWith(projectId) || 
-       JSON.parse(localStorage.getItem(k) || '{}').id === projectId || 
-       JSON.parse(localStorage.getItem(k) || '{}').project_id === projectId)
-    )
-    if (planKey) {
-      const planRaw = localStorage.getItem(planKey)
-      if (planRaw) {
-        planData = JSON.parse(planRaw).detected_data
+async function runDemoCalculation(params: Record<string, any>, projectId: string, router: ReturnType<typeof useRouter>) {
+  // Load plan geometry from IndexedDB or localStorage
+  const { getPlanRecord } = await import('@/lib/floor-plan-ai/image-cache')
+  let planRecord = await getPlanRecord(projectId)
+  let planData: any = planRecord?.detected_data || planRecord
+
+  if (!planData) {
+    try {
+      const keys = Object.keys(localStorage)
+      const planKey = keys.find(k => 
+        k.startsWith('bw_demo_plan_') && 
+        (k.endsWith(projectId) || 
+         JSON.parse(localStorage.getItem(k) || '{}').id === projectId || 
+         JSON.parse(localStorage.getItem(k) || '{}').project_id === projectId)
+      )
+      if (planKey) {
+        const planRaw = localStorage.getItem(planKey)
+        if (planRaw) {
+          planData = JSON.parse(planRaw).detected_data
+        }
       }
+    } catch (e) {
+      console.error('Failed to load plan geometry from localStorage', e)
     }
-  } catch (e) {
-    console.error('Failed to load plan geometry from localStorage', e)
   }
 
   // Fallback if no plan found in localStorage
@@ -135,6 +141,8 @@ export default function AnalysisProgressPage() {
   const [pipelineStatus, setPipelineStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [pipelineError, setPipelineError] = useState('')
   const [analysisResult, setAnalysisResult] = useState<FloorPlanAnalysisResult | null>(null)
+  const [viewMode, setViewMode] = useState<'pipeline' | 'editor' | 'wizard'>('pipeline')
+  const [planImageDataUrl, setPlanImageDataUrl] = useState<string | null>(null)
 
   // ── Wizard state ──────────────────────────────────────────────────────────
   const [showWizard, setShowWizard] = useState(false)
@@ -190,6 +198,10 @@ export default function AnalysisProgressPage() {
       fileDataUrl = (window as any).__BW_LAST_UPLOADED_IMAGE__ || null
     }
 
+    if (fileDataUrl) {
+      setPlanImageDataUrl(fileDataUrl)
+    }
+
     if (!fileDataUrl) {
       await runDemoMode()
       return
@@ -199,11 +211,22 @@ export default function AnalysisProgressPage() {
     const file = await dataURLtoFile(fileDataUrl, planId)
 
     abortRef.current = new AbortController()
-    const { getPlanRecord } = await import('@/lib/floor-plan-ai/image-cache')
+    const { getPlanRecord, savePlanRecord } = await import('@/lib/floor-plan-ai/image-cache')
     const storedRecord = await getPlanRecord(planId)
     const activeProjId = queryProjectId || projectId || storedRecord?.project_id || planId
-
     setProjectId(activeProjId)
+
+    // Skip pipeline repetition if completed analysis record already exists
+    if (storedRecord && storedRecord.detected_data && storedRecord.detected_data.rooms?.length > 0) {
+      const r = storedRecord.detected_data as FloorPlanAnalysisResult
+      setAnalysisResult(r)
+      setTotalArea(Math.round(r.total_area_sqft) || 1500)
+      setWallThickness(r.wall_thickness_m || 0.23)
+      setSteps(prev => prev.map(s => ({ ...s, status: 'done' as const })))
+      setPipelineStatus('done')
+      setViewMode('editor')
+      return
+    }
 
     const gen = runFloorPlanPipeline(file, {
       plan_id: planId,
@@ -234,7 +257,7 @@ export default function AnalysisProgressPage() {
         }
       }
       setPipelineStatus('done')
-      setShowWizard(true)
+      setViewMode('editor')
     } catch (err: any) {
       if (err.name === 'AbortError') return
       setPipelineError(err.message || 'Pipeline failed unexpectedly')
@@ -242,7 +265,57 @@ export default function AnalysisProgressPage() {
     }
   }, [planId, projectId, queryProjectId])
 
+  const handleEditorSave = async (updatedResult: FloorPlanAnalysisResult) => {
+    setAnalysisResult(updatedResult)
+    if (updatedResult.total_area_sqft) {
+      setTotalArea(Math.round(updatedResult.total_area_sqft))
+    }
+    const activeProjId = projectId || planId
+    const existingRaw = typeof window !== 'undefined' ? (localStorage.getItem(`bw_demo_plan_${planId}`) || localStorage.getItem(`bw_demo_plan_${activeProjId}`)) : null
+    const existing = existingRaw ? JSON.parse(existingRaw) : {}
+    const updatedPlan = {
+      ...existing,
+      id: planId,
+      project_id: activeProjId,
+      status: 'done',
+      created_at: existing.created_at || new Date().toISOString(),
+      detected_data: updatedResult,
+    }
+    try {
+      localStorage.setItem(`bw_demo_plan_${planId}`, JSON.stringify(updatedPlan))
+      if (activeProjId && activeProjId !== planId) {
+        localStorage.setItem(`bw_demo_plan_${activeProjId}`, JSON.stringify(updatedPlan))
+      }
+    } catch (err) {
+      console.warn('Failed to update localStorage with edited floor plan', err)
+    }
+
+    // Persist to IndexedDB & memory cache via image-cache
+    try {
+      const { savePlanRecord } = await import('@/lib/floor-plan-ai/image-cache')
+      await savePlanRecord(planId, activeProjId, updatedPlan)
+    } catch (err) {
+      console.warn('Failed to save plan record to IndexedDB', err)
+    }
+
+    setViewMode('wizard')
+    setShowWizard(true)
+  }
+
   const runDemoMode = async () => {
+    const { getPlanRecord } = await import('@/lib/floor-plan-ai/image-cache')
+    const storedRecord = await getPlanRecord(planId)
+    if (storedRecord && storedRecord.detected_data && storedRecord.detected_data.rooms?.length > 0) {
+      const r = storedRecord.detected_data as FloorPlanAnalysisResult
+      setAnalysisResult(r)
+      setTotalArea(Math.round(r.total_area_sqft) || 1500)
+      setWallThickness(r.wall_thickness_m || 0.23)
+      setSteps(prev => prev.map(s => ({ ...s, status: 'done' as const })))
+      setPipelineStatus('done')
+      setViewMode('editor')
+      return
+    }
+
     const gen = runDemoPipeline(planId, projectId || planId)
     for await (const updatedSteps of gen) {
       setSteps([...updatedSteps])
@@ -449,11 +522,27 @@ export default function AnalysisProgressPage() {
   const progress = Math.round((completedCount / steps.length) * 100)
 
   return (
-    <div className="max-w-[700px] mx-auto space-y-5">
+    <div className={`mx-auto space-y-5 transition-all ${viewMode === 'editor' ? 'max-w-[1400px]' : 'max-w-[700px]'}`}>
       <AnimatePresence mode="wait">
 
+        {/* ── 2D Interactive Floor Plan Editor View ── */}
+        {viewMode === 'editor' && analysisResult && (
+          <motion.div
+            key="editor"
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+          >
+            <FloorPlanEditor2D
+              initialResult={analysisResult}
+              imageDataUrl={planImageDataUrl}
+              onSaveAndProceed={handleEditorSave}
+            />
+          </motion.div>
+        )}
+
         {/* ── Pipeline Progress Screen ── */}
-        {!showWizard && (
+        {viewMode === 'pipeline' && (
           <motion.div
             key="pipeline"
             initial={{ opacity: 0, y: 16 }}
@@ -569,23 +658,32 @@ export default function AnalysisProgressPage() {
         )}
 
         {/* ── Wizard: Confirm Parameters ── */}
-        {showWizard && (
+        {(viewMode === 'wizard' || showWizard) && (
           <motion.div
             key="wizard"
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             className="bg-white dark:bg-[#1E1E24] border border-black/[0.06] dark:border-white/[0.06] rounded-[24px] p-6 space-y-5"
           >
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 bg-violet-500/10 rounded-2xl flex items-center justify-center">
-                <Settings className="w-5 h-5 text-violet-500" />
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 bg-violet-500/10 rounded-2xl flex items-center justify-center">
+                  <Settings className="w-5 h-5 text-violet-500" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black tracking-tight">Confirm Structural Parameters</h2>
+                  <p className="text-[12.5px] text-black/40 dark:text-white/35 mt-0.5">
+                    AI pre-filled values from your drawing — adjust if needed
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-lg font-black tracking-tight">Confirm Structural Parameters</h2>
-                <p className="text-[12.5px] text-black/40 dark:text-white/35 mt-0.5">
-                  AI pre-filled values from your drawing — adjust if needed
-                </p>
-              </div>
+              <button
+                type="button"
+                onClick={() => setViewMode('editor')}
+                className="px-3 py-1.5 rounded-xl bg-violet-500/10 hover:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/20 text-[12px] font-bold transition-all"
+              >
+                ✏️ Edit 2D Layout
+              </button>
             </div>
 
             {/* AI Detection Summary & Engineering Validation Dashboard */}

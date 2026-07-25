@@ -25,7 +25,7 @@ const themeBtn = document.getElementById('themeToggle');
 const body = document.body;
 
 // Restore saved theme
-const savedTheme = localStorage.getItem('bw-theme') || 'dark';
+const savedTheme = localStorage.getItem('bw-theme') || 'light';
 body.className = savedTheme;
 themeBtn.textContent = savedTheme === 'dark' ? '☀' : '☽';
 
