@@ -16,6 +16,8 @@ import {
   BRICK_CATALOG, SAND_CATALOG, AGGREGATE_CATALOG,
   PAINT_BRAND_LIST, TILE_BRAND_LIST, TILE_TYPE_LIST,
 } from '@/lib/construction-data'
+import * as XLSX from 'xlsx'
+import { buildBOQWorksheet } from '@/lib/boq-generator'
 
 // Types based on the backend schemas
 interface BOQItem {
@@ -283,99 +285,33 @@ export default function ProjectBOQTab() {
     if (format === 'excel') {
       setIsExporting('excel')
       try {
-        let xml = `<?xml version="1.0"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:relationship"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:html="http://www.w3.org/TR/REC-html40">
- <Styles>
-  <Style ss:ID="Default">
-   <Alignment ss:Vertical="Bottom"/>
-   <Borders/>
-   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="11" ss:Color="#000000"/>
-  </Style>
-  <Style ss:ID="Header">
-   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="12" ss:Color="#FFFFFF" ss:Bold="1"/>
-   <Interior ss:Color="#4F46E5" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="SubHeader">
-   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="11" ss:Color="#4F46E5" ss:Bold="1"/>
-   <Interior ss:Color="#EEF2F6" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="Amount">
-   <NumberFormat ss:Format="&quot;₹&quot;#,##0"/>
-   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Bold="1"/>
-  </Style>
-  <Style ss:ID="Title">
-   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="16" ss:Bold="1" ss:Color="#1E1E24"/>
-  </Style>
- </Styles>
- <Worksheet ss:Name="BOQ Takeoff Report">
-  <Table ss:ExpandedColumnCount="6" ss:ExpandedRowCount="${localBOQ.building_boq.sections.reduce((sum, c) => sum + c.items.length + 2, 0) + 15}" x:FullColumns="1" x:FullRows="1" ss:DefaultColumnWidth="60">
-   <Column ss:Width="40"/>
-   <Column ss:Width="250"/>
-   <Column ss:Width="50"/>
-   <Column ss:Width="60"/>
-   <Column ss:Width="65"/>
-   <Column ss:Width="95"/>
-   
-   <Row ss:Height="24">
-    <Cell ss:MergeAcross="5" ss:StyleID="Title"><Data ss:Type="String">BuildWise AI — Construction BOQ Report</Data></Cell>
-   </Row>
-   <Row><Cell ss:MergeAcross="5"><Data ss:Type="String">Project: ${localBOQ.project_name} | Date: ${new Date().toLocaleDateString()}</Data></Cell></Row>
-   <Row ss:Index="4" ss:Height="20">
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Sl No</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Item Description</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Unit</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Quantity</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Rate (₹)</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Amount (₹)</Data></Cell>
-   </Row>`
+        const workbook = XLSX.utils.book_new()
+        const formattedSections = localBOQ.building_boq.sections.map(sec => ({
+          name: sec.section_name,
+          items: sec.items.map(item => ({
+            sl: item.sl_no,
+            desc: item.description,
+            unit: item.unit,
+            qty: item.quantity,
+            rate: item.rate
+          }))
+        }))
 
-        localBOQ.building_boq.sections.forEach((section) => {
-          xml += `\n   <Row ss:Height="18">
-    <Cell ss:MergeAcross="5" ss:StyleID="SubHeader"><Data ss:Type="String">${section.section_name.toUpperCase()}</Data></Cell>
-   </Row>`
-
-          section.items.forEach((item) => {
-            xml += `\n   <Row>
-    <Cell><Data ss:Type="String">${item.sl_no}</Data></Cell>
-    <Cell><Data ss:Type="String">${item.description}</Data></Cell>
-    <Cell><Data ss:Type="String">${item.unit}</Data></Cell>
-    <Cell><Data ss:Type="Number">${item.quantity}</Data></Cell>
-    <Cell><Data ss:Type="Number">${item.rate}</Data></Cell>
-    <Cell ss:StyleID="Amount"><Data ss:Type="Number">${item.amount}</Data></Cell>
-   </Row>`
-          })
+        const boqSheet = buildBOQWorksheet(localBOQ.project_name || 'Project', formattedSections, {
+          labour: localBOQ.building_boq.labour_cost,
+          equipment: localBOQ.building_boq.equipment_cost,
+          margin: localBOQ.building_boq.contractor_margin,
+          contingency: localBOQ.building_boq.contingency
         })
 
-        // Summary block
-        xml += `\n   <Row><Cell ss:MergeAcross="5"><Data ss:Type="String"></Data></Cell></Row>`
-        xml += `\n   <Row ss:Height="18"><Cell ss:MergeAcross="5" ss:StyleID="SubHeader"><Data ss:Type="String">BOQ SUMMARY BREAKDOWN</Data></Cell></Row>`
-        xml += `\n   <Row><Cell ss:MergeAcross="4"><Data ss:Type="String">Material Takeoff Cost</Data></Cell><Cell ss:StyleID="Amount"><Data ss:Type="Number">${localBOQ.building_boq.material_subtotal}</Data></Cell></Row>`
-        xml += `\n   <Row><Cell ss:MergeAcross="4"><Data ss:Type="String">Labour Takeoff Cost</Data></Cell><Cell ss:StyleID="Amount"><Data ss:Type="Number">${localBOQ.building_boq.labour_cost}</Data></Cell></Row>`
-        xml += `\n   <Row><Cell ss:MergeAcross="4"><Data ss:Type="String">Machinery &amp; Rental Equipment</Data></Cell><Cell ss:StyleID="Amount"><Data ss:Type="Number">${localBOQ.building_boq.equipment_cost}</Data></Cell></Row>`
-        xml += `\n   <Row><Cell ss:MergeAcross="4"><Data ss:Type="String">Overhead &amp; Contractor Margin</Data></Cell><Cell ss:StyleID="Amount"><Data ss:Type="Number">${localBOQ.building_boq.contractor_margin}</Data></Cell></Row>`
-        xml += `\n   <Row><Cell ss:MergeAcross="4"><Data ss:Type="String">Contingency Buffer</Data></Cell><Cell ss:StyleID="Amount"><Data ss:Type="Number">${localBOQ.building_boq.contingency}</Data></Cell></Row>`
-        xml += `\n   <Row><Cell ss:MergeAcross="4"><Data ss:Type="String">GST (18% applied)</Data></Cell><Cell ss:StyleID="Amount"><Data ss:Type="Number">${localBOQ.building_boq.gst_amount}</Data></Cell></Row>`
-        xml += `\n   <Row ss:Height="20"><Cell ss:MergeAcross="4" ss:StyleID="SubHeader"><Data ss:Type="String">GRAND TOTAL CONTRACT AMOUNT</Data></Cell><Cell ss:StyleID="Amount"><Data ss:Type="Number">${localBOQ.building_boq.grand_total}</Data></Cell></Row>`
+        XLSX.utils.book_append_sheet(workbook, boqSheet, 'BOQ Report')
 
-        xml += `\n  </Table>
-  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
-   <Selected/>
-   <ProtectObjects>False</ProtectObjects>
-   <ProtectScenarios>False</ProtectScenarios>
-  </WorksheetOptions>
- </Worksheet>
-</Workbook>`
-
-        const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' })
+        const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
+        const blob = new Blob([excelBuffer], { type: 'application/octet-stream' })
         const url = URL.createObjectURL(blob)
         const link = document.createElement('a')
         link.setAttribute('href', url)
-        link.setAttribute('download', `BOQ_Takeoff_${projectId}.xls`)
+        link.setAttribute('download', `BuildWise_BOQ_${projectId}.xlsx`)
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
@@ -479,8 +415,8 @@ export default function ProjectBOQTab() {
                                 <td className="px-5 py-3 font-semibold text-black/75 dark:text-white/70">{item.description}</td>
                                 <td className="px-5 py-3 text-black/50">{item.unit}</td>
                                 <td className="px-5 py-3 text-right font-medium">{formatNumber(item.quantity)}</td>
-                                <td className="px-5 py-3 text-right text-black/50">{item.rate.toLocaleString()}</td>
-                                <td className="px-5 py-3 text-right font-black text-violet-500">₹{item.amount.toLocaleString()}</td>
+                                <td className="px-5 py-3 text-right text-black/50">{(item.rate ?? 0).toLocaleString()}</td>
+                                <td className="px-5 py-3 text-right font-black text-violet-500">₹{(item.amount ?? 0).toLocaleString()}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -534,8 +470,8 @@ export default function ProjectBOQTab() {
                                 <td className="px-5 py-3 font-semibold text-black/75 dark:text-white/70">{item.description}</td>
                                 <td className="px-5 py-3 text-black/50">{item.unit}</td>
                                 <td className="px-5 py-3 text-right font-medium">{formatNumber(item.quantity)}</td>
-                                <td className="px-5 py-3 text-right text-black/50">{item.rate.toLocaleString()}</td>
-                                <td className="px-5 py-3 text-right font-black text-violet-500">₹{item.amount.toLocaleString()}</td>
+                                <td className="px-5 py-3 text-right text-black/50">{(item.rate ?? 0).toLocaleString()}</td>
+                                <td className="px-5 py-3 text-right font-black text-violet-500">₹{(item.amount ?? 0).toLocaleString()}</td>
                               </tr>
                             ))}
                           </tbody>

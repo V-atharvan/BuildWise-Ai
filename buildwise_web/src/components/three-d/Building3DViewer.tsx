@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState, useMemo, useCallback, useEffect } from 'react'
+import { motion } from 'framer-motion'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Text, Grid, PerspectiveCamera, Html, Billboard } from '@react-three/drei'
 import * as THREE from 'three'
@@ -39,6 +40,7 @@ interface Window3D {
 
 interface Building3DViewerProps {
   rooms: Room3D[]
+  walls?: any[]
   doors?: Door3D[]
   windows?: Window3D[]
   columns?: any[]
@@ -129,41 +131,6 @@ function RoomMesh({
         </mesh>
       )}
 
-      {/* Walls */}
-      {showWalls && !isStruct && wallSegments.map((seg, i) => {
-        const midX = (seg.start[0] + seg.end[0]) / 2
-        const midY = (seg.start[1] + seg.end[1]) / 2
-        const wallKey = `${room.id}-${i}`
-        const isWallSelected = selectedWallKey === wallKey
-        return (
-          <mesh
-            key={i}
-            position={[midX, floorHeight / 2, midY]}
-            rotation={[0, seg.angle, 0]}
-            onClick={e => { e.stopPropagation(); onWallClick?.(room.id, i, seg.length, wallThickness) }}
-          >
-            <boxGeometry args={[seg.length, floorHeight, wallThickness]} />
-            <meshStandardMaterial
-              color={isWallSelected ? '#A855F7' : isSelected ? '#C084FC' : '#E5E7EB'}
-              transparent
-              opacity={isWallSelected ? 0.95 : wallOpacity}
-              wireframe={isWire}
-            />
-            {isWallSelected && (
-              <Html position={[0, floorHeight * 0.65, 0]} center distanceFactor={8}>
-                <div className="bg-[#1E1E24]/95 text-white border border-white/[0.08] p-3 rounded-2xl shadow-xl whitespace-nowrap text-[11px] font-semibold space-y-1 backdrop-blur-md">
-                  <p className="text-violet-400 font-bold border-b border-white/[0.06] pb-1 uppercase tracking-wider text-[9px]">Selected Wall</p>
-                  <p>📏 Length: <span className="font-bold text-violet-300">{seg.length.toFixed(2)} m</span></p>
-                  <p>📐 Thickness: <span className="font-bold text-violet-300">{(wallThickness * 1000).toFixed(0)} mm</span></p>
-                  <p>🧱 Volume: <span className="font-bold text-violet-300">{(seg.length * floorHeight * wallThickness).toFixed(2)} m³</span></p>
-                  <p>👷 Bricks: <span className="font-bold text-emerald-400">{Math.round(seg.length * floorHeight * wallThickness * 500).toLocaleString()} pcs</span></p>
-                </div>
-              </Html>
-            )}
-          </mesh>
-        )
-      })}
-
       {/* Room label */}
       {showLabels && (
         <Billboard position={[cx, floorHeight * 0.5, cy]} follow={true}>
@@ -176,7 +143,7 @@ function RoomMesh({
         </Billboard>
       )}
 
-      {/* Selection outline */}
+      {/* Selection floor glow & outline */}
       {isSelected && (
         <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, 0.04, 0]}>
           <shapeGeometry args={[shape]} />
@@ -318,11 +285,11 @@ function CameraTweener({ target, preset, walkthroughMode }: {
 // ── Scene ─────────────────────────────────────────────────────────────────────
 
 function Scene({
-  rooms, doors, windows, columns = [], floorHeight, scaleFactor, selectedRoomId, selectedWallKey,
+  rooms, walls = [], doors, windows, columns = [], floorHeight, scaleFactor, selectedRoomId, selectedWallKey,
   showWalls, showLabels, showDoors, showWindows, showColumns, cameraPreset, walkthroughMode,
   wallThickness, exploreMode, onRoomClick, onWallClick,
 }: {
-  rooms: Room3D[]; doors: Door3D[]; windows: Window3D[]; columns: any[]
+  rooms: Room3D[]; walls?: any[]; doors: Door3D[]; windows: Window3D[]; columns: any[]
   floorHeight: number; scaleFactor: number
   selectedRoomId: string | null; selectedWallKey: string | null
   showWalls: boolean; showLabels: boolean; showDoors: boolean; showWindows: boolean; showColumns: boolean
@@ -351,6 +318,71 @@ function Scene({
     }))
   }, [rooms, scaleFactor, centerOffset])
 
+  const deduplicatedWalls = useMemo(() => {
+    if (transformedRooms && transformedRooms.length > 0) {
+      const edgeMap = new Map<string, { p1: number[]; p2: number[]; roomsCount: number }>()
+      transformedRooms.forEach(room => {
+        const poly = room.polygon || []
+        for (let i = 0; i < poly.length; i++) {
+          const p1 = poly[i]
+          const p2 = poly[(i + 1) % poly.length]
+          const k1 = `${p1[0].toFixed(2)},${p1[1].toFixed(2)}`
+          const k2 = `${p2[0].toFixed(2)},${p2[1].toFixed(2)}`
+          const edgeKey = k1 < k2 ? `${k1}_${k2}` : `${k2}_${k1}`
+          const existing = edgeMap.get(edgeKey)
+          if (existing) {
+            existing.roomsCount += 1
+          } else {
+            edgeMap.set(edgeKey, { p1, p2, roomsCount: 1 })
+          }
+        }
+      })
+
+      const result = []
+      let idx = 0
+      for (const edge of edgeMap.values()) {
+        const dx = edge.p2[0] - edge.p1[0]
+        const dy = edge.p2[1] - edge.p1[1]
+        const length = Math.sqrt(dx * dx + dy * dy)
+        if (length < 0.05) continue
+        const isInternal = edge.roomsCount > 1
+        result.push({
+          id: `room_wall_${idx++}`,
+          midX: (edge.p1[0] + edge.p2[0]) / 2,
+          midY: (edge.p1[1] + edge.p2[1]) / 2,
+          length,
+          angle: Math.atan2(dy, dx),
+          thickness: isInternal ? 0.115 : (wallThickness || 0.23),
+          wall_type: isInternal ? 'internal' : 'external',
+        })
+      }
+      return result
+    }
+    return []
+  }, [transformedRooms, wallThickness])
+
+  const effectiveWalls = useMemo(() => {
+    if (walls && walls.length > 0) {
+      return walls.map((w, idx) => {
+        const p1 = [w.start[0] * scaleFactor - centerOffset.x, w.start[1] * scaleFactor - centerOffset.y]
+        const p2 = [w.end[0] * scaleFactor - centerOffset.x, w.end[1] * scaleFactor - centerOffset.y]
+        const dx = p2[0] - p1[0]
+        const dy = p2[1] - p1[1]
+        const length = Math.hypot(dx, dy)
+        return {
+          id: w.id || `wall_${idx}`,
+          midX: (p1[0] + p2[0]) / 2,
+          midY: (p1[1] + p2[1]) / 2,
+          length: Math.max(length, 0.1),
+          angle: Math.atan2(dy, dx),
+          thickness: w.thickness_m || (w.wall_type === 'internal' ? 0.115 : (wallThickness || 0.23)),
+          wall_type: w.wall_type || 'external',
+        }
+      })
+    }
+    return deduplicatedWalls
+  }, [walls, deduplicatedWalls, scaleFactor, centerOffset, wallThickness])
+
   const handleDoubleClick = (room: any) => {
     const poly = room.polygon
     if (poly?.length > 0) {
@@ -368,6 +400,9 @@ function Scene({
 
   const isMasonry = exploreMode === 'masonry'
   const isStruct = exploreMode === 'structural'
+  const isWire = exploreMode === 'wireframe'
+  const isTrans = exploreMode === 'transparent'
+  const wallOpacity = isTrans ? 0.12 : 0.65
 
   return (
     <>
@@ -384,11 +419,45 @@ function Scene({
           showWalls={showWalls} showLabels={showLabels} selectedWallKey={selectedWallKey}
           wallThickness={wallThickness} exploreMode={exploreMode}
           onHover={h => setHoveredRoom(h ? room.id : null)}
-          onClick={() => onRoomClick(room.id)}
+          onClick={() => {
+            onRoomClick(room.id)
+            onWallClick?.('', -1, 0, 0)
+          }}
           onDoubleClick={() => handleDoubleClick(room)}
           onWallClick={onWallClick}
         />
       ))}
+
+      {/* Global Deduplicated Single 3D Wall Rendering */}
+      {showWalls && !isStruct && effectiveWalls.map((wall, idx) => {
+        const isSelectedWall = selectedWallKey === wall.id
+        const wallColor = isSelectedWall
+          ? '#A855F7'
+          : wall.wall_type === 'internal' ? '#CBD5E1' : '#94A3B8'
+
+        return (
+          <group key={`${wall.id}_${idx}`}>
+            <mesh
+              position={[wall.midX, floorHeight / 2, wall.midY]}
+              rotation={[0, wall.angle, 0]}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (onWallClick) {
+                  onWallClick(wall.id, 0, wall.length, wall.thickness)
+                }
+              }}
+            >
+              <boxGeometry args={[wall.length, floorHeight, wall.thickness]} />
+              <meshStandardMaterial
+                color={wallColor}
+                transparent
+                opacity={isSelectedWall ? 0.92 : wallOpacity}
+                wireframe={isWire}
+              />
+            </mesh>
+          </group>
+        )
+      })}
 
       {/* Door markers */}
       {showDoors && !isStruct && doors.map(door => (
@@ -420,7 +489,7 @@ function Scene({
 // ── Main Export ───────────────────────────────────────────────────────────────
 
 export function Building3DViewer({
-  rooms, doors = [], windows = [], columns = [], floorHeight = 3.0, scaleFactor = 0.035,
+  rooms, walls = [], doors = [], windows = [], columns = [], floorHeight = 3.0, scaleFactor = 0.035,
   onRoomClick, onWallClick, selectedRoomId = null, selectedWallKey = null,
 }: Building3DViewerProps) {
   const [showLabels, setShowLabels] = useState(true)
@@ -434,9 +503,21 @@ export function Building3DViewer({
   // Explore Mode state (Section 10)
   const [exploreMode, setExploreMode] = useState<'normal' | 'wireframe' | 'transparent' | 'structural' | 'masonry'>('normal')
   
+  // Selected wall info card state
+  const [selectedWallInfo, setSelectedWallInfo] = useState<{
+    roomId: string
+    wallIndex: number
+    length: number
+    thickness: number
+  } | null>(null)
+  
   const wallThickness = 0.23
 
   const handleRoomClick = useCallback((id: string) => onRoomClick?.(id), [onRoomClick])
+  const handleWallClickInternal = useCallback((roomId: string, wallIndex: number, length: number, thickness: number) => {
+    setSelectedWallInfo({ roomId, wallIndex, length, thickness })
+    onWallClick?.({ roomId, wallIndex, length, thickness })
+  }, [onWallClick])
 
   if (!rooms || rooms.length === 0) {
     return (
@@ -516,7 +597,7 @@ export function Building3DViewer({
         <Canvas shadows dpr={[1, 2]} gl={{ preserveDrawingBuffer: true }}>
           <PerspectiveCamera makeDefault position={[14, 11, 14]} fov={50} />
           <Scene
-            rooms={rooms} doors={doors} windows={windows} columns={columns}
+            rooms={rooms} walls={walls} doors={doors} windows={windows} columns={columns}
             floorHeight={floorHeight} scaleFactor={scaleFactor}
             selectedRoomId={selectedRoomId} selectedWallKey={selectedWallKey}
             showWalls={showWalls} showLabels={showLabels}
@@ -524,10 +605,49 @@ export function Building3DViewer({
             cameraPreset={cameraPreset} walkthroughMode={walkthroughMode}
             wallThickness={wallThickness} exploreMode={exploreMode}
             onRoomClick={handleRoomClick}
-            onWallClick={(roomId, wallIdx, len, thick) => onWallClick?.({ roomId, wallIndex: wallIdx, length: len, thickness: thick })}
+            onWallClick={handleWallClickInternal}
           />
         </Canvas>
       </div>
+
+      {/* 2D Floating Overlay Card for Selected Wall (No ✕ button) */}
+      {selectedWallInfo && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute bottom-12 left-3 z-30 p-3.5 rounded-2xl bg-[#18181C]/95 backdrop-blur-md border border-purple-500/30 text-white shadow-2xl space-y-2 min-w-[250px]"
+        >
+          <div className="flex items-center gap-2 border-b border-white/10 pb-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-pulse" />
+            <span className="text-xs font-bold text-purple-300 uppercase tracking-wider">
+              {selectedWallInfo.thickness < 0.2 ? 'Internal Partition Wall (115mm)' : 'External Perimeter Wall (230mm)'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+            <div className="bg-white/[0.03] p-2 rounded-xl border border-white/[0.05]">
+              <span className="text-white/40 block text-[10px]">Length</span>
+              <span className="font-bold text-white">{selectedWallInfo.length.toFixed(2)} m</span>
+            </div>
+            <div className="bg-white/[0.03] p-2 rounded-xl border border-white/[0.05]">
+              <span className="text-white/40 block text-[10px]">Thickness</span>
+              <span className="font-bold text-white">{Math.round(selectedWallInfo.thickness * 1000)} mm</span>
+            </div>
+            <div className="bg-white/[0.03] p-2 rounded-xl border border-white/[0.05]">
+              <span className="text-white/40 block text-[10px]">Net Volume</span>
+              <span className="font-bold text-emerald-400">
+                {(selectedWallInfo.length * (floorHeight - 0.12) * selectedWallInfo.thickness).toFixed(2)} m³
+              </span>
+            </div>
+            <div className="bg-white/[0.03] p-2 rounded-xl border border-white/[0.05]">
+              <span className="text-white/40 block text-[10px]">Masonry Bricks</span>
+              <span className="font-bold text-amber-400">
+                {Math.round((selectedWallInfo.length * (floorHeight - 0.12) * selectedWallInfo.thickness) / 0.002448 * 1.05)} Bricks
+              </span>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Controls hint */}
       <div className="absolute bottom-3 left-3 z-20 px-2.5 py-1 rounded-lg bg-[#1E1E24]/80 backdrop-blur-md border border-white/[0.06] text-[10px] text-white/30">

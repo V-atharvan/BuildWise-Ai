@@ -9,6 +9,8 @@ import {
 import { formatCurrency, formatNumber } from '@/lib/utils'
 import { loadMaterialConfig, CEMENT_BRANDS, STEEL_BRAND_LIST, SAND_CATALOG } from '@/lib/construction-data'
 import type { AIRoom, AIWall, AIDoor, AIWindow } from '@/lib/floor-plan-ai/types'
+import * as XLSX from 'xlsx'
+import { buildBOQWorksheet } from '@/lib/boq-generator'
 
 // ── Types for Report State ──────────────────────────────────────────────────
 
@@ -335,110 +337,42 @@ export default function ProjectReportPage() {
     document.body.removeChild(link)
   }
 
-  // ── Excel Export Function (SpreadsheetML XML format) ──────────────────────
+  // ── Excel Export Function (true .xlsx workbook) ───────────────────────────
   const triggerExcelDownload = () => {
-    let xml = `<?xml version="1.0"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:relationship"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:html="http://www.w3.org/TR/REC-html40">
- <Styles>
-  <Style ss:ID="Default">
-   <Alignment ss:Vertical="Bottom"/>
-   <Borders/>
-   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="11" ss:Color="#000000"/>
-  </Style>
-  <Style ss:ID="Header">
-   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="12" ss:Color="#FFFFFF" ss:Bold="1"/>
-   <Interior ss:Color="#4F46E5" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="SubHeader">
-   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="11" ss:Color="#4F46E5" ss:Bold="1"/>
-   <Interior ss:Color="#EEF2F6" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="Amount">
-   <NumberFormat ss:Format="&quot;₹&quot;#,##0"/>
-   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Bold="1"/>
-  </Style>
-  <Style ss:ID="Title">
-   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="16" ss:Bold="1" ss:Color="#1E1E24"/>
-  </Style>
- </Styles>
- <Worksheet ss:Name="BOQ Takeoff Report">
-  <Table ss:ExpandedColumnCount="7" ss:ExpandedRowCount="${masterBOQ.reduce((sum, c) => sum + c.items.length + 2, 0) + 15}" x:FullColumns="1" x:FullRows="1" ss:DefaultColumnWidth="60">
-   <Column ss:Width="40"/>
-   <Column ss:Width="160"/>
-   <Column ss:Width="250"/>
-   <Column ss:Width="60"/>
-   <Column ss:Width="50"/>
-   <Column ss:Width="60"/>
-   <Column ss:Width="90"/>
-   
-   <Row ss:Height="24">
-    <Cell ss:MergeAcross="6" ss:StyleID="Title"><Data ss:Type="String">BuildWise AI — Construction Quantity Estimation Report</Data></Cell>
-   </Row>
-   <Row><Cell ss:MergeAcross="6"><Data ss:Type="String">Project: ${project?.name || 'Omkar Koli'} | Client: ${metadata.clientName} | Date: ${new Date().toLocaleDateString()}</Data></Cell></Row>
-   <Row ss:Index="4" ss:Height="20">
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Sl No</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Category</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Item Description</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Quantity</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Unit</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Rate (₹)</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Amount (₹)</Data></Cell>
-   </Row>`
+    try {
+      const workbook = XLSX.utils.book_new()
+      const formattedSections = masterBOQ.map(cat => ({
+        name: cat.category,
+        items: cat.items.map(item => ({
+          sl: item.sl,
+          desc: item.desc,
+          unit: item.unit,
+          qty: item.qty,
+          rate: item.rate
+        }))
+      }))
 
-    let rowIdx = 5
-    masterBOQ.forEach((cat) => {
-      xml += `\n   <Row ss:Height="18">
-    <Cell ss:MergeAcross="6" ss:StyleID="SubHeader"><Data ss:Type="String">${cat.category.toUpperCase()}</Data></Cell>
-   </Row>`
-      rowIdx++
-
-      cat.items.forEach((item) => {
-        xml += `\n   <Row>
-    <Cell><Data ss:Type="String">${item.sl}</Data></Cell>
-    <Cell><Data ss:Type="String">${cat.category}</Data></Cell>
-    <Cell><Data ss:Type="String">${item.desc}</Data></Cell>
-    <Cell><Data ss:Type="Number">${item.qty}</Data></Cell>
-    <Cell><Data ss:Type="String">${item.unit}</Data></Cell>
-    <Cell><Data ss:Type="Number">${item.rate}</Data></Cell>
-    <Cell ss:StyleID="Amount"><Data ss:Type="Number">${item.amt}</Data></Cell>
-   </Row>`
-        rowIdx++
+      const boqSheet = buildBOQWorksheet(project?.name || 'Project', formattedSections, {
+        labour: costBreakdownData.labour,
+        equipment: costBreakdownData.equipment,
+        margin: costBreakdownData.margin,
+        contingency: Math.round(costBreakdownData.material * 0.05)
       })
-    })
 
-    // Summary block
-    xml += `\n   <Row><Cell ss:MergeAcross="6"><Data ss:Type="String"></Data></Cell></Row>`
-    xml += `\n   <Row ss:Height="18"><Cell ss:MergeAcross="6" ss:StyleID="SubHeader"><Data ss:Type="String">COST ESTIMATION SUMMARY</Data></Cell></Row>`
-    xml += `\n   <Row><Cell ss:MergeAcross="5"><Data ss:Type="String">Material Takeoff Cost</Data></Cell><Cell ss:StyleID="Amount"><Data ss:Type="Number">${costBreakdownData.material}</Data></Cell></Row>`
-    xml += `\n   <Row><Cell ss:MergeAcross="5"><Data ss:Type="String">Labour Takeoff Cost</Data></Cell><Cell ss:StyleID="Amount"><Data ss:Type="Number">${costBreakdownData.labour}</Data></Cell></Row>`
-    xml += `\n   <Row><Cell ss:MergeAcross="5"><Data ss:Type="String">Machinery &amp; Rental Equipment</Data></Cell><Cell ss:StyleID="Amount"><Data ss:Type="Number">${costBreakdownData.equipment}</Data></Cell></Row>`
-    xml += `\n   <Row><Cell ss:MergeAcross="5"><Data ss:Type="String">Transportation &amp; Logistics</Data></Cell><Cell ss:StyleID="Amount"><Data ss:Type="Number">${costBreakdownData.transport}</Data></Cell></Row>`
-    xml += `\n   <Row><Cell ss:MergeAcross="5"><Data ss:Type="String">Contractor Charges &amp; Margin</Data></Cell><Cell ss:StyleID="Amount"><Data ss:Type="Number">${costBreakdownData.margin}</Data></Cell></Row>`
-    xml += `\n   <Row><Cell ss:MergeAcross="5"><Data ss:Type="String">GST (18% applied)</Data></Cell><Cell ss:StyleID="Amount"><Data ss:Type="Number">${costBreakdownData.gst}</Data></Cell></Row>`
-    xml += `\n   <Row ss:Height="20"><Cell ss:MergeAcross="5" ss:StyleID="SubHeader"><Data ss:Type="String">GRAND TOTAL CONTRACT AMOUNT</Data></Cell><Cell ss:StyleID="Amount"><Data ss:Type="Number">${costBreakdownData.grand}</Data></Cell></Row>`
+      XLSX.utils.book_append_sheet(workbook, boqSheet, 'BOQ Report')
 
-    xml += `\n  </Table>
-  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
-   <Selected/>
-   <ProtectObjects>False</ProtectObjects>
-   <ProtectScenarios>False</ProtectScenarios>
-  </WorksheetOptions>
- </Worksheet>
-</Workbook>`
-
-    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.setAttribute('href', url)
-    link.setAttribute('download', `Civil_Estimation_Report_${projectId}.xls`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
+      const blob = new Blob([excelBuffer], { type: 'application/octet-stream' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.setAttribute('href', url)
+      link.setAttribute('download', `BuildWise_BOQ_${projectId}.xlsx`)
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } catch (err) {
+      console.error("Excel export failed:", err)
+    }
   }
 
   return (
@@ -603,8 +537,8 @@ export default function ProjectReportPage() {
                     <td className="px-4 py-2.5 text-right font-medium">{r.floorArea.toFixed(1)}</td>
                     <td className="px-4 py-2.5 text-right font-medium">{r.wallArea.toFixed(1)}</td>
                     <td className="px-4 py-2.5 text-right font-medium">{r.wallVolume.toFixed(2)}</td>
-                    <td className="px-4 py-2.5 text-right text-violet-500 font-bold">₹{r.matCost.toLocaleString()}</td>
-                    <td className="px-4 py-2.5 text-right text-violet-600 font-black">₹{r.totalCost.toLocaleString()}</td>
+                    <td className="px-4 py-2.5 text-right text-violet-500 font-bold">₹{(r.matCost ?? 0).toLocaleString()}</td>
+                    <td className="px-4 py-2.5 text-right text-violet-600 font-black">₹{(r.totalCost ?? 0).toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -632,7 +566,7 @@ export default function ProjectReportPage() {
                 </div>
                 <div className="flex justify-between border-t border-black/[0.04] dark:border-white/[0.04] pt-2 mt-1 text-[12px] font-bold text-violet-500">
                   <span>Estimated Structural Cost:</span>
-                  <span>₹{w.cost.toLocaleString()}</span>
+                  <span>₹{(w.cost ?? 0).toLocaleString()}</span>
                 </div>
               </div>
             ))}
@@ -669,8 +603,8 @@ export default function ProjectReportPage() {
                         <td className="px-4 py-2.5 text-black/70 dark:text-white/80">{item.desc}</td>
                         <td className="px-4 py-2.5 text-right font-medium">{formatNumber(item.qty)}</td>
                         <td className="px-4 py-2.5 text-center text-black/40 dark:text-white/30">{item.unit}</td>
-                        <td className="px-4 py-2.5 text-right text-black/50 dark:text-white/40">{item.rate.toLocaleString()}</td>
-                        <td className="px-4 py-2.5 text-right font-bold text-violet-500">₹{item.amt.toLocaleString()}</td>
+                        <td className="px-4 py-2.5 text-right text-black/50 dark:text-white/40">{(item.rate ?? 0).toLocaleString()}</td>
+                        <td className="px-4 py-2.5 text-right font-bold text-violet-500">₹{(item.amt ?? 0).toLocaleString()}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -725,8 +659,8 @@ export default function ProjectReportPage() {
                       <td className="px-4 py-2.5 font-bold text-slate-800 dark:text-white">{l.type}</td>
                       <td className="px-4 py-2.5 text-center font-medium">{l.workers}</td>
                       <td className="px-4 py-2.5 text-center font-medium">{l.days}</td>
-                      <td className="px-4 py-2.5 text-right font-medium">{l.rate.toLocaleString()}</td>
-                      <td className="px-4 py-2.5 text-right font-black text-violet-500">₹{amt.toLocaleString()}</td>
+                      <td className="px-4 py-2.5 text-right font-medium">{(l.rate ?? 0).toLocaleString()}</td>
+                      <td className="px-4 py-2.5 text-right font-black text-violet-500">₹{(amt ?? 0).toLocaleString()}</td>
                     </tr>
                   )
                 })}
@@ -758,8 +692,8 @@ export default function ProjectReportPage() {
                   <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-white/[0.01]">
                     <td className="px-4 py-2.5 font-bold text-slate-800 dark:text-white">{e.desc}</td>
                     <td className="px-4 py-2.5 text-center font-medium">{e.days}</td>
-                    <td className="px-4 py-2.5 text-right font-medium">{e.rate.toLocaleString()}</td>
-                    <td className="px-4 py-2.5 text-right font-black text-violet-500">₹{(e.days * e.rate).toLocaleString()}</td>
+                    <td className="px-4 py-2.5 text-right font-medium">{(e.rate ?? 0).toLocaleString()}</td>
+                    <td className="px-4 py-2.5 text-right font-black text-violet-500">₹{((e.days || 0) * (e.rate || 0)).toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -781,7 +715,7 @@ export default function ProjectReportPage() {
             
             <div className="bg-slate-50 dark:bg-[#1E1E24] p-4 rounded-2xl border border-black/[0.05] dark:border-white/[0.05] space-y-2">
               <h4 className="font-bold border-b pb-1.5 mb-2">Takeoff Unit Rates</h4>
-              <p className="flex justify-between"><span>Total Construction Area:</span> <strong>{areaSqft.toLocaleString()} Sq Ft</strong></p>
+              <p className="flex justify-between"><span>Total Construction Area:</span> <strong>{(areaSqft ?? 0).toLocaleString()} Sq Ft</strong></p>
               <p className="flex justify-between"><span>Total Construction Area:</span> <strong>{areaSqm.toFixed(1)} Sq M</strong></p>
               <div className="w-full h-px bg-black/[0.06] dark:bg-white/[0.06] my-2" />
               <p className="flex justify-between text-[13px] font-bold"><span>Cost Per Room (avg):</span> <strong className="text-violet-500">₹{(costBreakdownData.grand / (rooms.length || 4)).toLocaleString(undefined, {maximumFractionDigits: 0})}</strong></p>
@@ -824,7 +758,7 @@ export default function ProjectReportPage() {
                   <div key={i} className="space-y-1">
                     <div className="flex justify-between text-[11px]">
                       <span className="font-bold">{r.name}</span>
-                      <span>₹{r.totalCost.toLocaleString()}</span>
+                      <span>₹{(r.totalCost ?? 0).toLocaleString()}</span>
                     </div>
                     <div className="h-2 bg-black/[0.05] dark:bg-white/[0.05] rounded-full overflow-hidden">
                       <div className="h-full bg-violet-500 rounded-full" style={{ width: `${pct}%` }} />
@@ -862,7 +796,7 @@ export default function ProjectReportPage() {
                     <Sparkles className="w-3.5 h-3.5 fill-violet-500/20" /> {s.title}
                   </h4>
                   <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 font-bold text-[11px]">
-                    Save ~₹{s.savings.toLocaleString()}
+                    Save ~₹{(s.savings ?? 0).toLocaleString()}
                   </span>
                 </div>
                 <p className="text-[12px] text-black/60 dark:text-white/40 leading-relaxed">

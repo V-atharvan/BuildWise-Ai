@@ -88,6 +88,134 @@ export function generateBOQItems(estimation: any): BOQItem[] {
 // MULTI-TAB EXCEL WORKBOOK EXPORT (IS 1200 AUDIT READY)
 // ══════════════════════════════════════════════════════════════════════════════
 
+export function buildBOQWorksheet(
+  projectName: string,
+  sections: { name: string; items: { sl: string | number; desc: string; unit: string; qty: number; rate: number }[] }[],
+  summaryCosts: {
+    labour?: number
+    equipment?: number
+    margin?: number
+    contingency?: number
+  } = {}
+) {
+  const ws: any = {}
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }, // Row 1 Title
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } }  // Row 2 Subtitle
+  ]
+
+  // Row 1 Title
+  ws['A1'] = { t: 's', v: 'BuildWise AI — Construction BOQ Report' }
+
+  // Row 2 Subtitle
+  ws['A2'] = { t: 's', v: `Project: ${projectName} | Date: ${new Date().toLocaleDateString()}` }
+
+  // Row 4 Table Headers
+  const headers = ['Sl No', 'Item Description', 'Unit', 'Quantity', 'Rate (₹)', 'Amount (₹)']
+  headers.forEach((h, colIdx) => {
+    const cellRef = XLSX.utils.encode_cell({ r: 3, c: colIdx })
+    ws[cellRef] = { t: 's', v: h }
+  })
+
+  let currentRow = 4
+  const amountCellRefs: string[] = []
+
+  sections.forEach(sec => {
+    // Section Header Row
+    ws['!merges'].push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: 5 } })
+    ws[XLSX.utils.encode_cell({ r: currentRow, c: 0 })] = { t: 's', v: sec.name.toUpperCase() }
+    currentRow++
+
+    sec.items.forEach(item => {
+      const rIdx = currentRow + 1
+      ws[XLSX.utils.encode_cell({ r: currentRow, c: 0 })] = { t: typeof item.sl === 'number' ? 'n' : 's', v: item.sl }
+      ws[XLSX.utils.encode_cell({ r: currentRow, c: 1 })] = { t: 's', v: item.desc }
+      ws[XLSX.utils.encode_cell({ r: currentRow, c: 2 })] = { t: 's', v: item.unit }
+      ws[XLSX.utils.encode_cell({ r: currentRow, c: 3 })] = { t: 'n', v: item.qty, z: '#,##0.00' }
+      ws[XLSX.utils.encode_cell({ r: currentRow, c: 4 })] = { t: 'n', v: item.rate, z: '"₹"#,##0.00' }
+      
+      const amtCell = XLSX.utils.encode_cell({ r: currentRow, c: 5 })
+      ws[amtCell] = { t: 'n', f: `D${rIdx}*E${rIdx}`, z: '"₹"#,##0.00' }
+      amountCellRefs.push(amtCell)
+      currentRow++
+    })
+  })
+
+  // Empty Spacer Row
+  currentRow++
+
+  // BOQ SUMMARY BREAKDOWN
+  ws['!merges'].push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: 5 } })
+  ws[XLSX.utils.encode_cell({ r: currentRow, c: 0 })] = { t: 's', v: 'BOQ SUMMARY BREAKDOWN' }
+  currentRow++
+
+  const firstAmtRef = amountCellRefs[0] || 'F5'
+  const lastAmtRef = amountCellRefs[amountCellRefs.length - 1] || 'F5'
+
+  // Material Takeoff Cost
+  const matRow = currentRow + 1
+  ws['!merges'].push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: 4 } })
+  ws[XLSX.utils.encode_cell({ r: currentRow, c: 0 })] = { t: 's', v: 'Material Takeoff Cost' }
+  ws[XLSX.utils.encode_cell({ r: currentRow, c: 5 })] = { t: 'n', f: `SUM(${firstAmtRef}:${lastAmtRef})`, z: '"₹"#,##0.00' }
+  currentRow++
+
+  // Labour Takeoff Cost
+  ws['!merges'].push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: 4 } })
+  ws[XLSX.utils.encode_cell({ r: currentRow, c: 0 })] = { t: 's', v: 'Labour Takeoff Cost' }
+  ws[XLSX.utils.encode_cell({ r: currentRow, c: 5 })] = { t: 'n', v: summaryCosts.labour ?? 330000, z: '"₹"#,##0.00' }
+  currentRow++
+
+  // Machinery & Rental Equipment
+  ws['!merges'].push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: 4 } })
+  ws[XLSX.utils.encode_cell({ r: currentRow, c: 0 })] = { t: 's', v: 'Machinery & Rental Equipment' }
+  ws[XLSX.utils.encode_cell({ r: currentRow, c: 5 })] = { t: 'n', v: summaryCosts.equipment ?? 55000, z: '"₹"#,##0.00' }
+  currentRow++
+
+  // Overhead & Contractor Margin
+  ws['!merges'].push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: 4 } })
+  ws[XLSX.utils.encode_cell({ r: currentRow, c: 0 })] = { t: 's', v: 'Overhead & Contractor Margin' }
+  ws[XLSX.utils.encode_cell({ r: currentRow, c: 5 })] = { t: 'n', v: summaryCosts.margin ?? 155000, z: '"₹"#,##0.00' }
+  currentRow++
+
+  // Contingency Buffer
+  const contRow = currentRow + 1
+  ws['!merges'].push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: 4 } })
+  ws[XLSX.utils.encode_cell({ r: currentRow, c: 0 })] = { t: 's', v: 'Contingency Buffer' }
+  ws[XLSX.utils.encode_cell({ r: currentRow, c: 5 })] = { t: 'n', v: summaryCosts.contingency ?? 77000, z: '"₹"#,##0.00' }
+  currentRow++
+
+  const subtotalStart = matRow
+  const subtotalEnd = contRow
+
+  // GST (18% applied)
+  const gstRow = currentRow + 1
+  ws['!merges'].push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: 4 } })
+  ws[XLSX.utils.encode_cell({ r: currentRow, c: 0 })] = { t: 's', v: 'GST (18% applied)' }
+  ws[XLSX.utils.encode_cell({ r: currentRow, c: 5 })] = { t: 'n', f: `SUM(F${subtotalStart}:F${subtotalEnd})*0.18`, z: '"₹"#,##0.00' }
+  currentRow++
+
+  // GRAND TOTAL CONTRACT AMOUNT
+  ws['!merges'].push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: 4 } })
+  ws[XLSX.utils.encode_cell({ r: currentRow, c: 0 })] = { t: 's', v: 'GRAND TOTAL CONTRACT AMOUNT' }
+  ws[XLSX.utils.encode_cell({ r: currentRow, c: 5 })] = { t: 'n', f: `SUM(F${subtotalStart}:F${gstRow})`, z: '"₹"#,##0.00' }
+  currentRow++
+
+  ws['!cols'] = [
+    { wch: 8 },  // Sl No
+    { wch: 48 }, // Description
+    { wch: 10 }, // Unit
+    { wch: 14 }, // Quantity
+    { wch: 16 }, // Rate
+    { wch: 22 }  // Amount
+  ]
+
+  ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: currentRow - 1, c: 5 } })
+  ws['!views'] = [{ state: 'frozen', xSplit: 0, ySplit: 4, activePane: 'bottomLeft' }]
+  ws['!pageSetup'] = { orientation: 'landscape', paperSize: 9 }
+
+  return ws
+}
+
 export function exportToExcel(estimation: any, projectName: string) {
   const items = generateBOQItems(estimation)
   const c = estimation.cost_breakdown || estimation.cost || {}
@@ -96,7 +224,35 @@ export function exportToExcel(estimation: any, projectName: string) {
 
   const workbook = XLSX.utils.book_new()
 
-  // Sheet 1: Project Metadata & Summary
+  // Sheet 1: Styled Construction BOQ Report
+  const categoriesMap = new Map<string, any[]>()
+  items.forEach(item => {
+    const cat = item.category || 'General Works'
+    if (!categoriesMap.has(cat)) categoriesMap.set(cat, [])
+    categoriesMap.get(cat)!.push({
+      sl: item.srNo,
+      desc: item.description,
+      unit: item.unit,
+      qty: item.quantity,
+      rate: item.rate
+    })
+  })
+
+  const formattedSections = Array.from(categoriesMap.entries()).map(([name, catItems]) => ({
+    name,
+    items: catItems
+  }))
+
+  const boqSheet = buildBOQWorksheet(projectName, formattedSections, {
+    labour: c.labour_cost,
+    equipment: c.equipment_cost,
+    margin: c.contractor_margin,
+    contingency: c.contingency
+  })
+
+  XLSX.utils.book_append_sheet(workbook, boqSheet, 'BOQ Report')
+
+  // Sheet 2: Executive Summary
   const summaryData = [
     ['BUILDWISE AI — EXECUTIVE BOQ ESTIMATION REPORT'],
     ['Project Name', projectName],
@@ -117,23 +273,6 @@ export function exportToExcel(estimation: any, projectName: string) {
   const sheetSummary = XLSX.utils.aoa_to_sheet(summaryData)
   XLSX.utils.book_append_sheet(workbook, sheetSummary, 'Executive Summary')
 
-  // Sheet 2: IS 1200 BOQ
-  const boqRows = items.map(item => ({
-    'Item #': item.srNo,
-    'Category': item.category,
-    'Item Description': item.description,
-    'IS Code Reference': item.isCode,
-    'Formula Used': item.formula,
-    'Quantity': item.quantity,
-    'Unit': item.unit,
-    'Unit Rate (INR)': item.rate,
-    'Total Amount (INR)': item.amount,
-    'Waste %': item.wastePct,
-    'GST %': item.gstPct
-  }))
-  const sheetBOQ = XLSX.utils.json_to_sheet(boqRows)
-  XLSX.utils.book_append_sheet(workbook, sheetBOQ, 'IS 1200 BOQ')
-
   // Sheet 3: Room Takeoffs
   const roomRows = rooms.map((r: any) => ({
     'Room Name': r.label,
@@ -146,21 +285,6 @@ export function exportToExcel(estimation: any, projectName: string) {
   }))
   const sheetRooms = XLSX.utils.json_to_sheet(roomRows)
   XLSX.utils.book_append_sheet(workbook, sheetRooms, 'Room Takeoffs')
-
-  // Sheet 4: Calculation Audits
-  const auditRows = audits.map((a: any) => ({
-    'Item ID': a.item_id,
-    'Item Name': a.item_name,
-    'Category': a.category,
-    'IS Code': a.is_code_reference,
-    'Formula': a.formula,
-    'Derivation Steps': (a.intermediate_steps || []).join(' | '),
-    'Final Value': a.final_value,
-    'Unit': a.unit,
-    'Confidence Score': `${Math.round(a.confidence * 100)}%`
-  }))
-  const sheetAudits = XLSX.utils.json_to_sheet(auditRows)
-  XLSX.utils.book_append_sheet(workbook, sheetAudits, 'Calculation Audits')
 
   const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
   const blob = new Blob([excelBuffer], { type: 'application/octet-stream' })

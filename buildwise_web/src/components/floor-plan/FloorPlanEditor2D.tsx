@@ -11,6 +11,8 @@ import type {
   FloorPlanAnalysisResult, AIRoom, AIDoor, AIWindow, AIWall, RoomType, DoorType
 } from '@/lib/floor-plan-ai/types'
 import { calculateTakeoff, TakeoffParams, EstimationResult } from '@/lib/estimation-engine'
+import { findNearestSnapTarget, SnapTarget } from '@/lib/editor/snap-engine'
+import { syncCoincidentRoomWalls, autoAlignAndCleanTopology } from '@/lib/editor/shared-node-graph'
 
 // ── Types for Editor ──────────────────────────────────────────────────────────
 
@@ -70,7 +72,15 @@ export default function FloorPlanEditor2D({
 
   // Dragging vertex state
   const [draggedVertex, setDraggedVertex] = useState<{ roomId: string; vertexIdx: number } | null>(null)
+  const [draggedEdgeHandle, setDraggedEdgeHandle] = useState<{
+    roomId: string
+    handle: 'top' | 'bottom' | 'left' | 'right'
+    startMousePos: [number, number]
+    initialPolygon: [number, number][]
+    initialBounds: { minX: number; maxX: number; minY: number; maxY: number }
+  } | null>(null)
   const [draggedElement, setDraggedElement] = useState<{ id: string; type: 'door' | 'window' } | null>(null)
+  const [activeSnapTarget, setActiveSnapTarget] = useState<SnapTarget | null>(null)
 
   // New room points accumulator (for 'add_room' tool: supports arbitrary N points)
   const [newRoomPoints, setNewRoomPoints] = useState<[number, number][]>([])
@@ -168,10 +178,15 @@ export default function FloorPlanEditor2D({
       const x = Math.min(imgDimensions.w, Math.max(0, Math.round((e.clientX - rect.left) * scaleX)))
       const y = Math.min(imgDimensions.h, Math.max(0, Math.round((e.clientY - rect.top) * scaleY)))
 
+      const rawCoords: [number, number] = [x, y]
+      const snapTarget = findNearestSnapTarget(rawCoords, rooms, walls, 1, pxPerMeter)
+      setActiveSnapTarget(snapTarget)
+      const targetPoint = snapTarget ? snapTarget.point : rawCoords
+
       setRooms(prevRooms => prevRooms.map(room => {
         if (room.id !== draggedVertex.roomId) return room
         const newPoly = [...room.polygon]
-        newPoly[draggedVertex.vertexIdx] = [x, y]
+        newPoly[draggedVertex.vertexIdx] = [targetPoint[0], targetPoint[1]]
         const area_m2 = calculatePolygonAreaM2(newPoly)
         return {
           ...room,
@@ -184,6 +199,11 @@ export default function FloorPlanEditor2D({
 
     const handleWindowMouseUp = () => {
       setDraggedVertex(null)
+      setActiveSnapTarget(null)
+      setRooms(latestRooms => {
+        setWalls(latestWalls => syncCoincidentRoomWalls(latestRooms, latestWalls))
+        return latestRooms
+      })
     }
 
     window.addEventListener('mousemove', handleWindowMouseMove)
@@ -193,6 +213,68 @@ export default function FloorPlanEditor2D({
       window.removeEventListener('mouseup', handleWindowMouseUp)
     }
   }, [draggedVertex, imgDimensions, calculatePolygonAreaM2])
+
+  // ── Global Window Drag Listener for Canva Mid-Edge Stretch Handles ───────────
+  useEffect(() => {
+    if (!draggedEdgeHandle) return
+
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      const scaleX = imgDimensions.w / rect.width
+      const scaleY = imgDimensions.h / rect.height
+      const x = Math.min(imgDimensions.w, Math.max(0, Math.round((e.clientX - rect.left) * scaleX)))
+      const y = Math.min(imgDimensions.h, Math.max(0, Math.round((e.clientY - rect.top) * scaleY)))
+
+      const dx = x - draggedEdgeHandle.startMousePos[0]
+      const dy = y - draggedEdgeHandle.startMousePos[1]
+      const { handle, roomId, initialPolygon, initialBounds } = draggedEdgeHandle
+      const tolerance = 5
+
+      setRooms(prevRooms => prevRooms.map(room => {
+        if (room.id !== roomId) return room
+
+        const newPoly = initialPolygon.map(([px, py]) => {
+          let nx = px
+          let ny = py
+          if (handle === 'right' && Math.abs(px - initialBounds.maxX) < tolerance) {
+            nx = Math.max(initialBounds.minX + 20, px + dx)
+          } else if (handle === 'left' && Math.abs(px - initialBounds.minX) < tolerance) {
+            nx = Math.min(initialBounds.maxX - 20, px + dx)
+          } else if (handle === 'bottom' && Math.abs(py - initialBounds.maxY) < tolerance) {
+            ny = Math.max(initialBounds.minY + 20, py + dy)
+          } else if (handle === 'top' && Math.abs(py - initialBounds.minY) < tolerance) {
+            ny = Math.min(initialBounds.maxY - 20, py + dy)
+          }
+          return [nx, ny] as [number, number]
+        })
+
+        const area_m2 = calculatePolygonAreaM2(newPoly)
+        return {
+          ...room,
+          polygon: newPoly,
+          area_m2,
+          area_sqft: Math.round(area_m2 * 10.7639),
+        }
+      }))
+    }
+
+    const handleWindowMouseUp = () => {
+      setDraggedEdgeHandle(null)
+      setActiveSnapTarget(null)
+      setRooms(latestRooms => {
+        setWalls(latestWalls => syncCoincidentRoomWalls(latestRooms, latestWalls))
+        return latestRooms
+      })
+    }
+
+    window.addEventListener('mousemove', handleWindowMouseMove)
+    window.addEventListener('mouseup', handleWindowMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove)
+      window.removeEventListener('mouseup', handleWindowMouseUp)
+    }
+  }, [draggedEdgeHandle, imgDimensions, calculatePolygonAreaM2])
 
   // ── Global Window Drag Listeners for Doors & Windows ─────────────────────────
   useEffect(() => {
@@ -314,6 +396,36 @@ export default function FloorPlanEditor2D({
       }
     }))
   }
+
+  // ── Resize Room Polygon Vertices Keeping Centroid Fixed ────────────────────
+  const handleResizeRoomArea = useCallback((roomId: string, newM2: number) => {
+    if (newM2 <= 0) return
+    setRooms(prevRooms => {
+      const nextRooms = prevRooms.map(room => {
+        if (room.id !== roomId) return room
+        const currentArea = room.area_m2 || calculatePolygonAreaM2(room.polygon)
+        if (!currentArea || currentArea <= 0 || !room.polygon || room.polygon.length < 3) {
+          return { ...room, area_m2: newM2, area_sqft: Math.round(newM2 * 10.7639) }
+        }
+        const ratio = Math.sqrt(newM2 / currentArea)
+        const cx = room.centroid ? room.centroid[0] : Math.round(room.polygon.reduce((s, p) => s + p[0], 0) / room.polygon.length)
+        const cy = room.centroid ? room.centroid[1] : Math.round(room.polygon.reduce((s, p) => s + p[1], 0) / room.polygon.length)
+        const newPoly: [number, number][] = room.polygon.map(([px, py]) => [
+          Math.round(cx + (px - cx) * ratio),
+          Math.round(cy + (py - cy) * ratio),
+        ])
+        const actualAreaM2 = calculatePolygonAreaM2(newPoly) || newM2
+        return {
+          ...room,
+          polygon: newPoly,
+          area_m2: Math.round(actualAreaM2 * 10) / 10,
+          area_sqft: Math.round(actualAreaM2 * 10.7639),
+        }
+      })
+      setWalls(latestWalls => syncCoincidentRoomWalls(nextRooms, latestWalls))
+      return nextRooms
+    })
+  }, [calculatePolygonAreaM2])
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const coords = getCanvasCoords(e)
@@ -474,6 +586,16 @@ export default function FloorPlanEditor2D({
                 <Trash2 className="w-3.5 h-3.5" /> Delete
               </button>
             )}
+            <button
+              onClick={() => {
+                const cleaned = autoAlignAndCleanTopology(rooms, walls)
+                setRooms(cleaned.rooms)
+                setWalls(cleaned.walls)
+              }}
+              className="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-[12px] font-bold flex items-center gap-1.5 transition-all"
+            >
+              <Sparkles className="w-3.5 h-3.5" /> Auto-Align & Clean Gaps
+            </button>
             <button
               onClick={handleReset}
               className="px-3 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-white/70 text-[12px] font-bold flex items-center gap-1.5 border border-white/[0.06] transition-all"
@@ -722,29 +844,83 @@ export default function FloorPlanEditor2D({
               )
             })}
 
-            {/* Layer 4: Corner Draggable Handles (TOP LAYER — Always clickable, even near doors/windows!) */}
-            {rooms.filter(r => selectedId === r.id && selectedType === 'room').map(room => (
-              <g key={`handles-${room.id}`}>
-                {room.polygon.map((pt, idx) => (
-                  <g
-                    key={idx}
-                    className="cursor-grab active:cursor-grabbing"
-                    onMouseDown={(e) => {
-                      e.stopPropagation()
-                      e.preventDefault()
-                      setDraggedVertex({ roomId: room.id, vertexIdx: idx })
-                    }}
-                  >
-                    {/* Invisible Hit Target (r=15) */}
-                    <circle cx={pt[0]} cy={pt[1]} r={15} fill="transparent" />
-                    {/* Outer Glow Ring */}
-                    <circle cx={pt[0]} cy={pt[1]} r={9} fill="#A855F7" fillOpacity={0.35} />
-                    {/* Visible Handle Dot */}
-                    <circle cx={pt[0]} cy={pt[1]} r={6} fill="#A855F7" stroke="#FFFFFF" strokeWidth={2.5} />
-                  </g>
-                ))}
-              </g>
-            ))}
+            {/* Layer 4: Canva Mid-Edge Handles & Sleek Corner Handles */}
+            {rooms.filter(r => selectedId === r.id && selectedType === 'room').map(room => {
+              const poly = room.polygon
+              if (!poly || poly.length < 3) return null
+
+              const xs = poly.map(p => p[0])
+              const ys = poly.map(p => p[1])
+              const minX = Math.min(...xs)
+              const maxX = Math.max(...xs)
+              const minY = Math.min(...ys)
+              const maxY = Math.max(...ys)
+
+              const edgeHandles: { id: 'top' | 'bottom' | 'left' | 'right'; x: number; y: number }[] = [
+                { id: 'top', x: (minX + maxX) / 2, y: minY },
+                { id: 'bottom', x: (minX + maxX) / 2, y: maxY },
+                { id: 'left', x: minX, y: (minY + maxY) / 2 },
+                { id: 'right', x: maxX, y: (minY + maxY) / 2 },
+              ]
+
+              return (
+                <g key={`handles-${room.id}`}>
+                  {/* Sleek Resized Corner Handle Dots (r=3.5) */}
+                  {poly.map((pt, idx) => (
+                    <g
+                      key={`vertex-${idx}`}
+                      className="cursor-grab active:cursor-grabbing"
+                      onMouseDown={(e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                        setDraggedVertex({ roomId: room.id, vertexIdx: idx })
+                      }}
+                    >
+                      {/* Invisible Touch Hit Target (r=14) */}
+                      <circle cx={pt[0]} cy={pt[1]} r={14} fill="transparent" />
+                      {/* Sleek Outer Glow */}
+                      <circle cx={pt[0]} cy={pt[1]} r={7} fill="#A855F7" fillOpacity={0.25} />
+                      {/* Sleek Crisp Corner Dot (r=3.5) */}
+                      <circle cx={pt[0]} cy={pt[1]} r={3.5} fill="#A855F7" stroke="#FFFFFF" strokeWidth={1.5} />
+                    </g>
+                  ))}
+
+                  {/* Canva Pill-Shaped Mid-Edge Stretch Handles ([=]) */}
+                  {edgeHandles.map(h => (
+                    <g
+                      key={`edge-${h.id}`}
+                      className="cursor-pointer"
+                      onMouseDown={(e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                        setDraggedEdgeHandle({
+                          roomId: room.id,
+                          handle: h.id,
+                          startMousePos: [h.x, h.y],
+                          initialPolygon: poly,
+                          initialBounds: { minX, maxX, minY, maxY },
+                        })
+                      }}
+                    >
+                      {/* Invisible Hit Box (24x24) */}
+                      <rect x={h.x - 12} y={h.y - 12} width={24} height={24} fill="transparent" />
+                      {/* Pill Shape */}
+                      <rect
+                        x={h.id === 'top' || h.id === 'bottom' ? h.x - 10 : h.x - 3.5}
+                        y={h.id === 'top' || h.id === 'bottom' ? h.y - 3.5 : h.y - 10}
+                        width={h.id === 'top' || h.id === 'bottom' ? 20 : 7}
+                        height={h.id === 'top' || h.id === 'bottom' ? 7 : 20}
+                        rx={3.5}
+                        fill="#A855F7"
+                        stroke="#FFFFFF"
+                        strokeWidth={1.5}
+                        className="shadow-md hover:fill-purple-400 transition-colors"
+                      />
+                    </g>
+                  ))}
+                </g>
+              )
+            })}
 
             {/* In-progress Single Wall Line Preview */}
             {newWallStart && mousePos && (
@@ -767,6 +943,30 @@ export default function FloorPlanEditor2D({
                 {newRoomPoints.map((pt, i) => (
                   <circle key={i} cx={pt[0]} cy={pt[1]} r={6} fill="#10B981" stroke="#FFFFFF" strokeWidth={2} />
                 ))}
+              </g>
+            )}
+            {/* Magnetic Snap Visual Guide Line Overlay (#A855F7 Dashed Line) */}
+            {activeSnapTarget && (
+              <g style={{ pointerEvents: 'none' }}>
+                {activeSnapTarget.guideSegment && (
+                  <line
+                    x1={activeSnapTarget.guideSegment.p1[0]}
+                    y1={activeSnapTarget.guideSegment.p1[1]}
+                    x2={activeSnapTarget.guideSegment.p2[0]}
+                    y2={activeSnapTarget.guideSegment.p2[1]}
+                    stroke="#A855F7"
+                    strokeWidth={2.5}
+                    strokeDasharray="6,3"
+                  />
+                )}
+                <circle
+                  cx={activeSnapTarget.point[0]}
+                  cy={activeSnapTarget.point[1]}
+                  r={6}
+                  fill="#A855F7"
+                  stroke="#FFFFFF"
+                  strokeWidth={2}
+                />
               </g>
             )}
           </svg>
@@ -819,15 +1019,30 @@ export default function FloorPlanEditor2D({
               </div>
 
               <div className="grid grid-cols-2 gap-2 pt-1">
-                <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05] text-center">
-                  <p className="text-[10px] text-white/40">Floor Area</p>
-                  <p className="text-sm font-black text-violet-400 mt-0.5">{selectedRoom.area_m2?.toFixed(2)} m²</p>
-                  <p className="text-[10px] text-white/30">({selectedRoom.area_sqft} sq ft)</p>
+                <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05] text-center space-y-1">
+                  <p className="text-[10px] text-white/40 font-bold">Editable Area (m²)</p>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={selectedRoom.area_m2 ? selectedRoom.area_m2.toFixed(1) : ''}
+                    onChange={e => {
+                      const val = parseFloat(e.target.value) || 0
+                      handleResizeRoomArea(selectedRoom.id, val)
+                    }}
+                    className="w-full text-center px-1.5 py-0.5 rounded-lg bg-[#24242C] border border-violet-500/40 text-violet-300 font-black text-sm outline-none"
+                  />
                 </div>
-                <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05] text-center">
-                  <p className="text-[10px] text-white/40">Vertices</p>
-                  <p className="text-sm font-black text-emerald-400 mt-0.5">{selectedRoom.polygon.length} points</p>
-                  <p className="text-[10px] text-white/30">Polygon Shape</p>
+                <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05] text-center space-y-1">
+                  <p className="text-[10px] text-white/40 font-bold">Editable Area (sqft)</p>
+                  <input
+                    type="number"
+                    value={selectedRoom.area_sqft || Math.round((selectedRoom.area_m2 || 0) * 10.7639)}
+                    onChange={e => {
+                      const sqft = parseFloat(e.target.value) || 0
+                      handleResizeRoomArea(selectedRoom.id, sqft / 10.7639)
+                    }}
+                    className="w-full text-center px-1.5 py-0.5 rounded-lg bg-[#24242C] border border-emerald-500/40 text-emerald-300 font-black text-sm outline-none"
+                  />
                 </div>
               </div>
 

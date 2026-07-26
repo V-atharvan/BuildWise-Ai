@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft, FileText, Upload, Trash2, Calendar,
@@ -10,6 +10,7 @@ import {
   FolderOpen, Building, Eye, Users, Shield, MapPin, Edit3, Save, X
 } from 'lucide-react'
 import { projectsApi, uploadApi } from '@/lib/api'
+import { calculateTakeoff } from '@/lib/estimation-engine'
 import { getPlanImageDataUrl } from '@/lib/floor-plan-ai/image-cache'
 import { formatDate, formatRelativeTime, formatCurrency } from '@/lib/utils'
 
@@ -197,14 +198,24 @@ export default function ProjectDetailPage() {
   const estimations = isDemo ? demoEstimations : (project.estimations ?? [])
   const latestEstimate = estimations[0] || null
 
-  // Calculate stats values
-  const totalRoomsCount = latestEstimate ? latestEstimate.room_takeoffs?.length ?? 4 : 4
-  const totalCostVal = latestEstimate ? latestEstimate.total_cost : 0
-  const materialCostVal = latestEstimate ? latestEstimate.cost_breakdown?.total_material_cost : 0
-  const totalAreaM2 = latestEstimate ? latestEstimate.room_takeoffs?.reduce((s: number, r: any) => s + r.area_m2, 0) ?? 64.4 : 64.4
+  // Calculate live stats values from live floor plan geometry or latest estimation
+  const activePlan = plans && plans.length > 0 ? (plans[0].detected_data || plans[0]) : null
+  let liveTakeoff: any = null
+  if (activePlan) {
+    try {
+      liveTakeoff = calculateTakeoff(activePlan, { building_type: 'house', num_floors: 1, floor_height: 3.0, wall_thickness: 0.23, slab_thickness: 0.12, concrete_grade: 'M20', steel_grade: 'Fe500', mortar_ratio: '1:5', foundation_type: 'isolated', roof_type: 'flat_rcc', brick_type: 'red_brick', waste_percentage: 5 })
+    } catch {
+      liveTakeoff = null
+    }
+  }
+
+  const totalRoomsCount = liveTakeoff ? liveTakeoff.room_takeoffs?.length : (latestEstimate ? latestEstimate.room_takeoffs?.length ?? 4 : (activePlan?.rooms?.length || 4))
+  const totalCostVal = liveTakeoff ? liveTakeoff.total_cost : (latestEstimate ? latestEstimate.total_cost : 0)
+  const materialCostVal = liveTakeoff ? liveTakeoff.cost_breakdown?.total_material_cost : (latestEstimate ? latestEstimate.cost_breakdown?.total_material_cost : 0)
+  const totalAreaM2 = liveTakeoff ? liveTakeoff.room_takeoffs?.reduce((s: number, r: any) => s + r.area_m2, 0) : (latestEstimate ? latestEstimate.room_takeoffs?.reduce((s: number, r: any) => s + r.area_m2, 0) ?? 64.4 : (activePlan?.total_area_m2 || 64.4))
   const totalAreaSqft = totalAreaM2 * 10.7639
   const durationDays = Math.ceil(totalAreaM2 * 1.5) // ~1.5 days per m2
-  const confidenceScore = latestEstimate ? latestEstimate.confidence_score * 100 : 85
+  const confidenceScore = liveTakeoff ? (liveTakeoff.confidence_score * 100) : (latestEstimate ? latestEstimate.confidence_score * 100 : 88)
 
   return (
     <div className="space-y-6">
@@ -356,9 +367,9 @@ export default function ProjectDetailPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {plans.map((plan: any) => (
+                {plans.map((plan: any, idx: number) => (
                   <div
-                    key={plan.id}
+                    key={`${plan.id}_${idx}`}
                     className="flex items-center justify-between p-4 rounded-2xl border border-black/[0.06] dark:border-white/[0.06] bg-black/[0.01] dark:bg-white/[0.01] hover:border-violet-500/20 transition-all flex-wrap gap-4"
                   >
                     <div className="flex items-center gap-3.5 min-w-[200px]">

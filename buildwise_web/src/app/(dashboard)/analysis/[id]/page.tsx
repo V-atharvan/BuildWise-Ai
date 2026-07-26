@@ -1,5 +1,6 @@
 'use client'
 
+import { Suspense } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -20,24 +21,20 @@ import { validateFloorPlanGeometry } from '@/lib/floor-plan-ai/validation-engine
 import { calculateProjectConfidence } from '@/lib/floor-plan-ai/confidence-engine'
 import FloorPlanEditor2D from '@/components/floor-plan/FloorPlanEditor2D'
 
-// ── Step icon mapping ────────────────────────────────────────────────────────
-const STEP_ICONS: Record<string, React.ReactNode> = {
-  enhance:       <Zap className="w-4 h-4" />,
-  scale:         <Ruler className="w-4 h-4" />,
-  ocr:           <Eye className="w-4 h-4" />,
-  walls:         <Layers className="w-4 h-4" />,
-  rooms:         <LayoutDashboard className="w-4 h-4" />,
-  doors_windows: <DoorOpen className="w-4 h-4" />,
-  classify:      <Sparkles className="w-4 h-4" />,
-  confidence:    <CheckCircle2 className="w-4 h-4" />,
-  validate:      <RefreshCw className="w-4 h-4" />,
-  generate:      <Building2 className="w-4 h-4" />,
-  done:          <CheckCircle2 className="w-4 h-4" />,
+export default function AnalysisProgressPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
+      </div>
+    }>
+      <AnalysisProgressContent />
+    </Suspense>
+  )
 }
 
 // ── Local demo calculation (no backend) ─────────────────────────────────────
 async function runDemoCalculation(params: Record<string, any>, projectId: string, router: ReturnType<typeof useRouter>) {
-  // Load plan geometry from IndexedDB or localStorage
   const { getPlanRecord } = await import('@/lib/floor-plan-ai/image-cache')
   let planRecord = await getPlanRecord(projectId)
   let planData: any = planRecord?.detected_data || planRecord
@@ -62,7 +59,6 @@ async function runDemoCalculation(params: Record<string, any>, projectId: string
     }
   }
 
-  // Fallback if no plan found in localStorage
   if (!planData) {
     planData = {
       rooms: [
@@ -78,14 +74,8 @@ async function runDemoCalculation(params: Record<string, any>, projectId: string
         { id: 'wall_4', length_m: 4.0, thickness_m: 0.15, room_ids: ['room_3', 'room_4'] },
         { id: 'wall_5', length_m: 7.2, thickness_m: 0.23, room_ids: ['room_1', 'room_3'] }
       ],
-      doors: [
-        { id: 'door_1', wall_id: 'wall_1', width_m: 1.0, height_m: 2.1 },
-        { id: 'door_2', wall_id: 'wall_3', width_m: 0.9, height_m: 2.1 }
-      ],
-      windows: [
-        { id: 'win_1', wall_id: 'wall_1', width_m: 1.5, height_m: 1.2 },
-        { id: 'win_2', wall_id: 'wall_5', width_m: 1.2, height_m: 1.2 }
-      ],
+      doors: [],
+      windows: [],
       columns: [],
       staircases: [],
       total_area_m2: 64.4,
@@ -109,7 +99,6 @@ async function runDemoCalculation(params: Record<string, any>, projectId: string
   })
 
   try {
-    // Clear old estimation results to free up quota before saving
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const key = localStorage.key(i)
       if (key && key.startsWith('bw_demo_est_') && key !== `bw_demo_est_${result.id}`) {
@@ -118,17 +107,12 @@ async function runDemoCalculation(params: Record<string, any>, projectId: string
     }
     localStorage.setItem(`bw_demo_est_${result.id}`, JSON.stringify(result))
   } catch (e) {
-    // QuotaExceededError: storage is full — estimation still navigates normally
     console.warn('localStorage quota exceeded; estimation saved to memory only.', e)
   }
   router.push(`/estimate/${projectId}?estimation_id=${result.id}`)
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// Component
-// ════════════════════════════════════════════════════════════════════════════
-
-export default function AnalysisProgressPage() {
+function AnalysisProgressContent() {
   const { id: planId } = useParams() as { id: string }
   const router = useRouter()
   const searchParams = useSearchParams()
