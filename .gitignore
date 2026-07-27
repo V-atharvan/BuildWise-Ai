@@ -29,7 +29,7 @@ build/
 *.flutter-plugins
 *.flutter-plugins-dependencies
 
-# Environment Variables
+# Environment Variables & Secrets
 .env
 .env.local
 .env.development.local
@@ -38,6 +38,8 @@ build/
 *.env
 !.env.example
 !.env.prod.example
+*.csv
+api_keys_export.csv
 
 # IDEs and Editors
 .idea/

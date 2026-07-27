@@ -5,13 +5,14 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   MousePointer, Square, DoorOpen, AppWindow, Trash2, RotateCcw,
   Sparkles, CheckCircle2, AlertCircle, Plus, Eye, Layers, Settings,
-  Calculator, ChevronRight, Ruler, Maximize2, RefreshCw, Edit3, X
+  Calculator, ChevronRight, Ruler, Maximize2, RefreshCw, Edit3, X,
+  Undo2, Redo2
 } from 'lucide-react'
 import type {
   FloorPlanAnalysisResult, AIRoom, AIDoor, AIWindow, AIWall, RoomType, DoorType
 } from '@/lib/floor-plan-ai/types'
 import { calculateTakeoff, TakeoffParams, EstimationResult } from '@/lib/estimation-engine'
-import { findNearestSnapTarget, SnapTarget } from '@/lib/editor/snap-engine'
+import { findNearestSnapTarget, SnapTarget, findCanvaEdgeMagneticSnap, findDoorWindowSnapTarget } from '@/lib/editor/snap-engine'
 import { syncCoincidentRoomWalls, autoAlignAndCleanTopology } from '@/lib/editor/shared-node-graph'
 
 // ── Types for Editor ──────────────────────────────────────────────────────────
@@ -65,6 +66,37 @@ export default function FloorPlanEditor2D({
   const [windows, setWindows] = useState<AIWindow[]>(() => initialResult.windows || [])
   const [scaleInfo, setScaleInfo] = useState(() => initialResult.scale || { px_per_meter: 40 })
 
+  // History stack for Undo / Redo
+  const [history, setHistory] = useState<{ rooms: AIRoom[]; walls: AIWall[]; doors: AIDoor[]; windows: AIWindow[] }[]>([])
+  const [redoStack, setRedoStack] = useState<{ rooms: AIRoom[]; walls: AIWall[]; doors: AIDoor[]; windows: AIWindow[] }[]>([])
+
+  const pushHistory = useCallback(() => {
+    setHistory(prev => [...prev.slice(-30), { rooms, walls, doors, windows }])
+    setRedoStack([])
+  }, [rooms, walls, doors, windows])
+
+  const handleUndo = useCallback(() => {
+    if (history.length === 0) return
+    const prev = history[history.length - 1]
+    setHistory(h => h.slice(0, h.length - 1))
+    setRedoStack(r => [...r, { rooms, walls, doors, windows }])
+    setRooms(prev.rooms)
+    setWalls(prev.walls)
+    setDoors(prev.doors)
+    setWindows(prev.windows)
+  }, [history, rooms, walls, doors, windows])
+
+  const handleRedo = useCallback(() => {
+    if (redoStack.length === 0) return
+    const next = redoStack[redoStack.length - 1]
+    setRedoStack(r => r.slice(0, r.length - 1))
+    setHistory(h => [...h, { rooms, walls, doors, windows }])
+    setRooms(next.rooms)
+    setWalls(next.walls)
+    setDoors(next.doors)
+    setWindows(next.windows)
+  }, [redoStack, rooms, walls, doors, windows])
+
   // Active Tool state
   const [activeTool, setActiveTool] = useState<EditorTool>('select')
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -80,6 +112,17 @@ export default function FloorPlanEditor2D({
     initialBounds: { minX: number; maxX: number; minY: number; maxY: number }
   } | null>(null)
   const [draggedElement, setDraggedElement] = useState<{ id: string; type: 'door' | 'window' } | null>(null)
+  const [draggedRoom, setDraggedRoom] = useState<{
+    roomId: string
+    startMousePos: [number, number]
+    initialPolygon: [number, number][]
+  } | null>(null)
+  const [draggedWall, setDraggedWall] = useState<{
+    wallId: string
+    startMousePos: [number, number]
+    initialStart: [number, number]
+    initialEnd: [number, number]
+  } | null>(null)
   const [activeSnapTarget, setActiveSnapTarget] = useState<SnapTarget | null>(null)
 
   // New room points accumulator (for 'add_room' tool: supports arbitrary N points)
@@ -155,8 +198,18 @@ export default function FloorPlanEditor2D({
     return areaPx / (pxPerMeter * pxPerMeter)
   }, [pxPerMeter])
 
+  // ── Stable State Refs for Global Drag Handlers ──────────────────────────────
+  const roomsRef = useRef(rooms)
+  roomsRef.current = rooms
+  const wallsRef = useRef(walls)
+  wallsRef.current = walls
+  const pxPerMeterRef = useRef(pxPerMeter)
+  pxPerMeterRef.current = pxPerMeter
+  const calculatePolygonAreaM2Ref = useRef(calculatePolygonAreaM2)
+  calculatePolygonAreaM2Ref.current = calculatePolygonAreaM2
+
   // ── Mouse & Drag Event Handlers ─────────────────────────────────────────────
-  const getCanvasCoords = (e: React.MouseEvent<HTMLDivElement>): [number, number] | null => {
+  const getCanvasCoords = (e: React.MouseEvent): [number, number] | null => {
     if (!containerRef.current) return null
     const rect = containerRef.current.getBoundingClientRect()
     const scaleX = imgDimensions.w / rect.width
@@ -179,7 +232,7 @@ export default function FloorPlanEditor2D({
       const y = Math.min(imgDimensions.h, Math.max(0, Math.round((e.clientY - rect.top) * scaleY)))
 
       const rawCoords: [number, number] = [x, y]
-      const snapTarget = findNearestSnapTarget(rawCoords, rooms, walls, 1, pxPerMeter)
+      const snapTarget = findNearestSnapTarget(rawCoords, roomsRef.current, wallsRef.current, 1, pxPerMeterRef.current)
       setActiveSnapTarget(snapTarget)
       const targetPoint = snapTarget ? snapTarget.point : rawCoords
 
@@ -187,7 +240,7 @@ export default function FloorPlanEditor2D({
         if (room.id !== draggedVertex.roomId) return room
         const newPoly = [...room.polygon]
         newPoly[draggedVertex.vertexIdx] = [targetPoint[0], targetPoint[1]]
-        const area_m2 = calculatePolygonAreaM2(newPoly)
+        const area_m2 = calculatePolygonAreaM2Ref.current(newPoly)
         return {
           ...room,
           polygon: newPoly,
@@ -212,7 +265,7 @@ export default function FloorPlanEditor2D({
       window.removeEventListener('mousemove', handleWindowMouseMove)
       window.removeEventListener('mouseup', handleWindowMouseUp)
     }
-  }, [draggedVertex, imgDimensions, calculatePolygonAreaM2])
+  }, [draggedVertex, imgDimensions])
 
   // ── Global Window Drag Listener for Canva Mid-Edge Stretch Handles ───────────
   useEffect(() => {
@@ -231,6 +284,33 @@ export default function FloorPlanEditor2D({
       const { handle, roomId, initialPolygon, initialBounds } = draggedEdgeHandle
       const tolerance = 5
 
+      let targetCoord = 0
+      if (handle === 'right') targetCoord = initialBounds.maxX + dx
+      else if (handle === 'left') targetCoord = initialBounds.minX + dx
+      else if (handle === 'bottom') targetCoord = initialBounds.maxY + dy
+      else if (handle === 'top') targetCoord = initialBounds.minY + dy
+
+      const canvaSnap = findCanvaEdgeMagneticSnap(handle, targetCoord, initialBounds, roomsRef.current, wallsRef.current, roomId, 8)
+      if (canvaSnap && canvaSnap.guideSegment) {
+        setActiveSnapTarget({
+          type: 'magnetic_edge',
+          point: canvaSnap.guideSegment.p1,
+          distancePx: 0,
+          label: canvaSnap.label,
+          color: '#EC4899',
+          guideSegment: canvaSnap.guideSegment,
+        })
+      } else {
+        setActiveSnapTarget(null)
+      }
+
+      const effectiveDx = canvaSnap && (handle === 'left' || handle === 'right')
+        ? canvaSnap.snappedPos - (handle === 'right' ? initialBounds.maxX : initialBounds.minX)
+        : dx
+      const effectiveDy = canvaSnap && (handle === 'top' || handle === 'bottom')
+        ? canvaSnap.snappedPos - (handle === 'bottom' ? initialBounds.maxY : initialBounds.minY)
+        : dy
+
       setRooms(prevRooms => prevRooms.map(room => {
         if (room.id !== roomId) return room
 
@@ -238,18 +318,18 @@ export default function FloorPlanEditor2D({
           let nx = px
           let ny = py
           if (handle === 'right' && Math.abs(px - initialBounds.maxX) < tolerance) {
-            nx = Math.max(initialBounds.minX + 20, px + dx)
+            nx = Math.max(initialBounds.minX + 20, px + effectiveDx)
           } else if (handle === 'left' && Math.abs(px - initialBounds.minX) < tolerance) {
-            nx = Math.min(initialBounds.maxX - 20, px + dx)
+            nx = Math.min(initialBounds.maxX - 20, px + effectiveDx)
           } else if (handle === 'bottom' && Math.abs(py - initialBounds.maxY) < tolerance) {
-            ny = Math.max(initialBounds.minY + 20, py + dy)
+            ny = Math.max(initialBounds.minY + 20, py + effectiveDy)
           } else if (handle === 'top' && Math.abs(py - initialBounds.minY) < tolerance) {
-            ny = Math.min(initialBounds.maxY - 20, py + dy)
+            ny = Math.min(initialBounds.maxY - 20, py + effectiveDy)
           }
           return [nx, ny] as [number, number]
         })
 
-        const area_m2 = calculatePolygonAreaM2(newPoly)
+        const area_m2 = calculatePolygonAreaM2Ref.current(newPoly)
         return {
           ...room,
           polygon: newPoly,
@@ -274,7 +354,7 @@ export default function FloorPlanEditor2D({
       window.removeEventListener('mousemove', handleWindowMouseMove)
       window.removeEventListener('mouseup', handleWindowMouseUp)
     }
-  }, [draggedEdgeHandle, imgDimensions, calculatePolygonAreaM2])
+  }, [draggedEdgeHandle, imgDimensions])
 
   // ── Global Window Drag Listeners for Doors & Windows ─────────────────────────
   useEffect(() => {
@@ -288,15 +368,33 @@ export default function FloorPlanEditor2D({
       const x = Math.min(imgDimensions.w, Math.max(0, Math.round((e.clientX - rect.left) * scaleX)))
       const y = Math.min(imgDimensions.h, Math.max(0, Math.round((e.clientY - rect.top) * scaleY)))
 
+      const rawPos: [number, number] = [x, y]
+      const snapResult = findDoorWindowSnapTarget(rawPos, roomsRef.current, wallsRef.current, 14)
+
+      const finalPos = snapResult ? snapResult.center : rawPos
+      if (snapResult) {
+        setActiveSnapTarget({
+          type: 'magnetic_edge',
+          point: finalPos,
+          distancePx: 0,
+          label: snapResult.label,
+          color: '#EC4899',
+          guideSegment: snapResult.guideSegment,
+        })
+      } else {
+        setActiveSnapTarget(null)
+      }
+
       if (draggedElement.type === 'door') {
-        setDoors(prev => prev.map(d => d.id === draggedElement.id ? { ...d, center: [x, y] } : d))
+        setDoors(prev => prev.map(d => d.id === draggedElement.id ? { ...d, center: finalPos } : d))
       } else if (draggedElement.type === 'window') {
-        setWindows(prev => prev.map(w => w.id === draggedElement.id ? { ...w, center: [x, y] } : w))
+        setWindows(prev => prev.map(w => w.id === draggedElement.id ? { ...w, center: finalPos } : w))
       }
     }
 
     const handleWindowMouseUp = () => {
       setDraggedElement(null)
+      setActiveSnapTarget(null)
     }
 
     window.addEventListener('mousemove', handleWindowMouseMove)
@@ -306,6 +404,114 @@ export default function FloorPlanEditor2D({
       window.removeEventListener('mouseup', handleWindowMouseUp)
     }
   }, [draggedElement, imgDimensions])
+
+  // ── Global Window Drag Listener for Whole Room Polygons ──────────────────────
+  useEffect(() => {
+    if (!draggedRoom) return
+
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      const scaleX = imgDimensions.w / rect.width
+      const scaleY = imgDimensions.h / rect.height
+      const x = Math.min(imgDimensions.w, Math.max(0, Math.round((e.clientX - rect.left) * scaleX)))
+      const y = Math.min(imgDimensions.h, Math.max(0, Math.round((e.clientY - rect.top) * scaleY)))
+
+      const dx = x - draggedRoom.startMousePos[0]
+      const dy = y - draggedRoom.startMousePos[1]
+
+      let effectiveDx = dx
+      let effectiveDy = dy
+      let activeSnap: SnapTarget | null = null
+
+      const currentPoly: [number, number][] = draggedRoom.initialPolygon.map(([px, py]) => [px + dx, py + dy])
+      const otherRooms = roomsRef.current.filter(r => r.id !== draggedRoom.roomId)
+
+      let minSnapDist = 14
+      for (let i = 0; i < currentPoly.length; i++) {
+        const pt = currentPoly[i]
+        const snap = findNearestSnapTarget(pt, otherRooms, wallsRef.current, 1, pxPerMeterRef.current)
+        if (snap && snap.distancePx < minSnapDist) {
+          minSnapDist = snap.distancePx
+          const origPt = draggedRoom.initialPolygon[i]
+          effectiveDx = snap.point[0] - origPt[0]
+          effectiveDy = snap.point[1] - origPt[1]
+          activeSnap = snap
+        }
+      }
+
+      setActiveSnapTarget(activeSnap)
+
+      setRooms(prevRooms => prevRooms.map(room => {
+        if (room.id !== draggedRoom.roomId) return room
+
+        const newPoly: [number, number][] = draggedRoom.initialPolygon.map(([px, py]) => [
+          px + effectiveDx,
+          py + effectiveDy,
+        ])
+        const area_m2 = calculatePolygonAreaM2Ref.current(newPoly)
+        return {
+          ...room,
+          polygon: newPoly,
+          area_m2,
+          area_sqft: Math.round(area_m2 * 10.7639),
+        }
+      }))
+    }
+
+    const handleWindowMouseUp = () => {
+      setDraggedRoom(null)
+      setActiveSnapTarget(null)
+      setRooms(latestRooms => {
+        setWalls(latestWalls => syncCoincidentRoomWalls(latestRooms, latestWalls))
+        return latestRooms
+      })
+    }
+
+    window.addEventListener('mousemove', handleWindowMouseMove)
+    window.addEventListener('mouseup', handleWindowMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove)
+      window.removeEventListener('mouseup', handleWindowMouseUp)
+    }
+  }, [draggedRoom, imgDimensions])
+
+  // ── Global Window Drag Listener for Standalone Wall Vectors ─────────────────
+  useEffect(() => {
+    if (!draggedWall) return
+
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      const scaleX = imgDimensions.w / rect.width
+      const scaleY = imgDimensions.h / rect.height
+      const x = Math.min(imgDimensions.w, Math.max(0, Math.round((e.clientX - rect.left) * scaleX)))
+      const y = Math.min(imgDimensions.h, Math.max(0, Math.round((e.clientY - rect.top) * scaleY)))
+
+      const dx = x - draggedWall.startMousePos[0]
+      const dy = y - draggedWall.startMousePos[1]
+
+      setWalls(prev => prev.map(w => {
+        if (w.id !== draggedWall.wallId) return w
+        return {
+          ...w,
+          start: [draggedWall.initialStart[0] + dx, draggedWall.initialStart[1] + dy],
+          end: [draggedWall.initialEnd[0] + dx, draggedWall.initialEnd[1] + dy],
+        }
+      }))
+    }
+
+    const handleWindowMouseUp = () => {
+      setDraggedWall(null)
+    }
+
+    window.addEventListener('mousemove', handleWindowMouseMove)
+    window.addEventListener('mouseup', handleWindowMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove)
+      window.removeEventListener('mouseup', handleWindowMouseUp)
+    }
+  }, [draggedWall, imgDimensions])
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const coords = getCanvasCoords(e)
@@ -521,14 +727,116 @@ export default function FloorPlanEditor2D({
   }
 
   // ── Element Deletion ────────────────────────────────────────────────────────
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = useCallback(() => {
     if (!selectedId) return
+    pushHistory()
     if (selectedType === 'room') setRooms(r => r.filter(x => x.id !== selectedId))
+    else if (selectedType === 'wall') setWalls(w => w.filter(x => x.id !== selectedId))
     else if (selectedType === 'door') setDoors(d => d.filter(x => x.id !== selectedId))
     else if (selectedType === 'window') setWindows(w => w.filter(x => x.id !== selectedId))
     setSelectedId(null)
     setSelectedType(null)
-  }
+  }, [selectedId, selectedType, pushHistory])
+
+  // ── Keyboard Accessibility & Shortcut Handlers ──────────────────────────────
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const targetEl = e.target as HTMLElement | null
+      if (targetEl && (targetEl.tagName === 'INPUT' || targetEl.tagName === 'TEXTAREA' || targetEl.tagName === 'SELECT')) {
+        return
+      }
+
+      // Delete or Backspace
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedId) {
+          e.preventDefault()
+          handleDeleteSelected()
+        }
+      }
+
+      // Undo (Ctrl+Z) / Redo (Ctrl+Y or Ctrl+Shift+Z)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) {
+          handleRedo()
+        } else {
+          handleUndo()
+        }
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault()
+        handleRedo()
+      }
+
+      // Escape to cancel/deselect
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setSelectedId(null)
+        setSelectedType(null)
+        setActiveTool('select')
+        setNewRoomPoints([])
+        setNewWallStart(null)
+      }
+
+      // Arrow Key Nudging
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        if (!selectedId || !selectedType) return
+        e.preventDefault()
+        pushHistory()
+        const step = e.shiftKey ? 10 : 1
+        const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0
+        const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0
+
+        if (selectedType === 'room') {
+          setRooms(prev => prev.map(r => {
+            if (r.id !== selectedId) return r
+            const newPoly = r.polygon.map(([x, y]) => [x + dx, y + dy] as [number, number])
+            const cx: [number, number] = r.centroid ? [r.centroid[0] + dx, r.centroid[1] + dy] : [0, 0]
+            return { ...r, polygon: newPoly, centroid: cx }
+          }))
+        } else if (selectedType === 'wall') {
+          setWalls(prev => prev.map(w => {
+            if (w.id !== selectedId) return w
+            const s = w.start ? [w.start[0] + dx, w.start[1] + dy] as [number, number] : w.start
+            const end = w.end ? [w.end[0] + dx, w.end[1] + dy] as [number, number] : w.end
+            return { ...w, start: s, end }
+          }))
+        } else if (selectedType === 'door') {
+          setDoors(prev => prev.map(d => {
+            if (d.id !== selectedId) return d
+            return { ...d, center: [d.center[0] + dx, d.center[1] + dy] as [number, number] }
+          }))
+        } else if (selectedType === 'window') {
+          setWindows(prev => prev.map(w => {
+            if (w.id !== selectedId) return w
+            return { ...w, center: [w.center[0] + dx, w.center[1] + dy] as [number, number] }
+          }))
+        }
+      }
+
+      // Tab navigation
+      if (e.key === 'Tab') {
+        e.preventDefault()
+        const allElements: { id: string; type: 'room' | 'wall' | 'door' | 'window' }[] = [
+          ...rooms.map(r => ({ id: r.id, type: 'room' as const })),
+          ...walls.map(w => ({ id: w.id, type: 'wall' as const })),
+          ...doors.map(d => ({ id: d.id, type: 'door' as const })),
+          ...windows.map(w => ({ id: w.id, type: 'window' as const })),
+        ]
+        if (allElements.length === 0) return
+        const currIdx = allElements.findIndex(el => el.id === selectedId)
+        let nextIdx = 0
+        if (currIdx >= 0) {
+          nextIdx = e.shiftKey ? (currIdx - 1 + allElements.length) % allElements.length : (currIdx + 1) % allElements.length
+        }
+        setSelectedId(allElements[nextIdx].id)
+        setSelectedType(allElements[nextIdx].type)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedId, selectedType, handleDeleteSelected, handleUndo, handleRedo, pushHistory, rooms, walls, doors, windows])
 
   // ── Reset to Initial AI Draft ────────────────────────────────────────────────
   const handleReset = () => {
@@ -578,6 +886,22 @@ export default function FloorPlanEditor2D({
 
           {/* Context Actions */}
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleUndo}
+              disabled={history.length === 0}
+              title="Undo (Ctrl+Z)"
+              className="px-2 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] disabled:opacity-30 disabled:hover:bg-white/[0.05] text-white/70 text-[12px] font-bold flex items-center gap-1 border border-white/[0.06] transition-all"
+            >
+              <Undo2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Undo</span>
+            </button>
+            <button
+              onClick={handleRedo}
+              disabled={redoStack.length === 0}
+              title="Redo (Ctrl+Y / Ctrl+Shift+Z)"
+              className="px-2 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] disabled:opacity-30 disabled:hover:bg-white/[0.05] text-white/70 text-[12px] font-bold flex items-center gap-1 border border-white/[0.06] transition-all"
+            >
+              <Redo2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Redo</span>
+            </button>
             {selectedId && (
               <button
                 onClick={handleDeleteSelected}
@@ -588,6 +912,7 @@ export default function FloorPlanEditor2D({
             )}
             <button
               onClick={() => {
+                pushHistory()
                 const cleaned = autoAlignAndCleanTopology(rooms, walls)
                 setRooms(cleaned.rooms)
                 setWalls(cleaned.walls)
@@ -597,7 +922,7 @@ export default function FloorPlanEditor2D({
               <Sparkles className="w-3.5 h-3.5" /> Auto-Align & Clean Gaps
             </button>
             <button
-              onClick={handleReset}
+              onClick={() => { pushHistory(); handleReset() }}
               className="px-3 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-white/70 text-[12px] font-bold flex items-center gap-1.5 border border-white/[0.06] transition-all"
             >
               <RotateCcw className="w-3.5 h-3.5" /> Reset AI Draft
@@ -731,7 +1056,7 @@ export default function FloorPlanEditor2D({
             viewBox={`0 0 ${imgDimensions.w} ${imgDimensions.h}`}
             preserveAspectRatio="xMidYMid meet"
           >
-            {/* Layer 1: Room Polygon Fills */}
+            {/* Layer 1: Room Polygon Fills (Draggable by clicking anywhere inside!) */}
             {rooms.map(room => {
               const poly = room.polygon
               if (!poly || poly.length < 3) return null
@@ -748,24 +1073,51 @@ export default function FloorPlanEditor2D({
                   stroke={isSelected ? '#A855F7' : color}
                   strokeWidth={isSelected ? 3.5 : 2}
                   strokeDasharray={isSelected ? '6,3' : 'none'}
-                  className="cursor-pointer transition-all hover:fill-opacity-35"
-                  onClick={(e) => {
+                  className="cursor-grab active:cursor-grabbing transition-all hover:fill-opacity-35"
+                  onMouseDown={(e) => {
                     e.stopPropagation()
+                    e.preventDefault()
                     setSelectedId(room.id)
                     setSelectedType('room')
+                    const coords = getCanvasCoords(e)
+                    if (coords) {
+                      setDraggedRoom({
+                        roomId: room.id,
+                        startMousePos: coords,
+                        initialPolygon: room.polygon,
+                      })
+                    }
                   }}
                 />
               )
             })}
 
-            {/* Layer 1.5: Render Standalone Walls / Partition Vectors */}
+            {/* Layer 1.5: Render Standalone Walls / Partition Vectors (Draggable!) */}
             {walls.map(w => {
               const isSelected = selectedId === w.id && selectedType === 'wall'
               const p1 = w.start
               const p2 = w.end
               if (!p1 || !p2) return null
               return (
-                <g key={w.id} className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setSelectedId(w.id); setSelectedType('wall') }}>
+                <g
+                  key={w.id}
+                  className="cursor-grab active:cursor-grabbing"
+                  onMouseDown={(e) => {
+                    e.stopPropagation()
+                    e.preventDefault()
+                    setSelectedId(w.id)
+                    setSelectedType('wall')
+                    const coords = getCanvasCoords(e)
+                    if (coords && w.start && w.end) {
+                      setDraggedWall({
+                        wallId: w.id,
+                        startMousePos: coords,
+                        initialStart: w.start,
+                        initialEnd: w.end,
+                      })
+                    }
+                  }}
+                >
                   <line
                     x1={p1[0]} y1={p1[1]} x2={p2[0]} y2={p2[1]}
                     stroke={isSelected ? '#A855F7' : w.wall_type === 'partition' ? '#F59E0B' : '#C084FC'}
@@ -796,10 +1148,10 @@ export default function FloorPlanEditor2D({
                     setDraggedElement({ id: door.id, type: 'door' })
                   }}
                 >
-                  {/* Invisible Hit Target (r=18) */}
-                  <circle cx={cx} cy={cy} r={18} fill="transparent" />
-                  <circle cx={cx} cy={cy} r={13} fill="#F59E0B" fillOpacity={isSelected ? 0.95 : 0.8} stroke="#FFFFFF" strokeWidth={2} />
-                  <text x={cx} y={cy + 3.5} textAnchor="middle" fill="#FFFFFF" fontSize={10} fontWeight="black" style={{ pointerEvents: 'none' }}>D</text>
+                  {/* Invisible Hit Target */}
+                  <circle cx={cx} cy={cy} r={12} fill="transparent" />
+                  <circle cx={cx} cy={cy} r={7.5} fill="#F59E0B" fillOpacity={isSelected ? 0.95 : 0.85} stroke="#FFFFFF" strokeWidth={1.5} />
+                  <text x={cx} y={cy + 2.5} textAnchor="middle" fill="#FFFFFF" fontSize={8} fontWeight="black" style={{ pointerEvents: 'none' }}>D</text>
                 </g>
               )
             })}
@@ -820,15 +1172,15 @@ export default function FloorPlanEditor2D({
                     setDraggedElement({ id: win.id, type: 'window' })
                   }}
                 >
-                  {/* Invisible Hit Target (r=18) */}
-                  <rect x={cx - 16} y={cy - 14} width={32} height={28} rx={6} fill="transparent" />
-                  <rect x={cx - 11} y={cy - 9} width={22} height={18} rx={4} fill="#3B82F6" fillOpacity={isSelected ? 0.95 : 0.8} stroke="#FFFFFF" strokeWidth={2} />
-                  <text x={cx} y={cy + 3.5} textAnchor="middle" fill="#FFFFFF" fontSize={9} fontWeight="black" style={{ pointerEvents: 'none' }}>W</text>
+                  {/* Invisible Hit Target */}
+                  <rect x={cx - 10} y={cy - 9} width={20} height={18} fill="transparent" />
+                  <rect x={cx - 7} y={cy - 6} width={14} height={12} rx={3} fill="#3B82F6" fillOpacity={isSelected ? 0.95 : 0.85} stroke="#FFFFFF" strokeWidth={1.5} />
+                  <text x={cx} y={cy + 2.5} textAnchor="middle" fill="#FFFFFF" fontSize={7.5} fontWeight="black" style={{ pointerEvents: 'none' }}>W</text>
                 </g>
               )
             })}
 
-            {/* Layer 3: Room Label Badges */}
+            {/* Layer 3: Compact Room Label Badges (Draggable!) */}
             {rooms.map(room => {
               const poly = room.polygon
               if (!poly || poly.length < 3) return null
@@ -836,10 +1188,28 @@ export default function FloorPlanEditor2D({
               const cx = poly.reduce((s, p) => s + p[0], 0) / poly.length
               const cy = poly.reduce((s, p) => s + p[1], 0) / poly.length
               return (
-                <g key={`label-${room.id}`} transform={`translate(${cx}, ${cy})`} style={{ pointerEvents: 'none' }}>
-                  <rect x={-45} y={-14} width={90} height={28} rx={6} fill="#1E1E24" fillOpacity={0.85} stroke={color} strokeWidth={1.5} />
-                  <text x={0} y={-1} textAnchor="middle" fill="#FFFFFF" fontSize={11} fontWeight="bold">{room.label}</text>
-                  <text x={0} y={10} textAnchor="middle" fill="#A1A1AA" fontSize={9}>{room.area_m2?.toFixed(1)} m²</text>
+                <g
+                  key={`label-${room.id}`}
+                  transform={`translate(${cx}, ${cy})`}
+                  className="cursor-grab active:cursor-grabbing"
+                  onMouseDown={(e) => {
+                    e.stopPropagation()
+                    e.preventDefault()
+                    setSelectedId(room.id)
+                    setSelectedType('room')
+                    const coords = getCanvasCoords(e)
+                    if (coords) {
+                      setDraggedRoom({
+                        roomId: room.id,
+                        startMousePos: coords,
+                        initialPolygon: room.polygon,
+                      })
+                    }
+                  }}
+                >
+                  <rect x={-32} y={-10} width={64} height={20} rx={4} fill="#1E1E24" fillOpacity={0.75} stroke={color} strokeWidth={1} />
+                  <text x={0} y={-1} textAnchor="middle" fill="#FFFFFF" fontSize={9.5} fontWeight="bold" style={{ pointerEvents: 'none' }}>{room.label}</text>
+                  <text x={0} y={7.5} textAnchor="middle" fill="#A1A1AA" fontSize={7.5} style={{ pointerEvents: 'none' }}>{room.area_m2?.toFixed(1)} m²</text>
                 </g>
               )
             })}
@@ -865,7 +1235,7 @@ export default function FloorPlanEditor2D({
 
               return (
                 <g key={`handles-${room.id}`}>
-                  {/* Sleek Resized Corner Handle Dots (r=3.5) */}
+                  {/* Sleek Resized Corner Handle Dots */}
                   {poly.map((pt, idx) => (
                     <g
                       key={`vertex-${idx}`}
@@ -876,12 +1246,12 @@ export default function FloorPlanEditor2D({
                         setDraggedVertex({ roomId: room.id, vertexIdx: idx })
                       }}
                     >
-                      {/* Invisible Touch Hit Target (r=14) */}
-                      <circle cx={pt[0]} cy={pt[1]} r={14} fill="transparent" />
+                      {/* Invisible Touch Hit Target */}
+                      <circle cx={pt[0]} cy={pt[1]} r={10} fill="transparent" />
                       {/* Sleek Outer Glow */}
-                      <circle cx={pt[0]} cy={pt[1]} r={7} fill="#A855F7" fillOpacity={0.25} />
-                      {/* Sleek Crisp Corner Dot (r=3.5) */}
-                      <circle cx={pt[0]} cy={pt[1]} r={3.5} fill="#A855F7" stroke="#FFFFFF" strokeWidth={1.5} />
+                      <circle cx={pt[0]} cy={pt[1]} r={4} fill="#A855F7" fillOpacity={0.25} />
+                      {/* Sleek Crisp Corner Dot */}
+                      <circle cx={pt[0]} cy={pt[1]} r={2.5} fill="#A855F7" stroke="#FFFFFF" strokeWidth={1} />
                     </g>
                   ))}
 
@@ -902,18 +1272,18 @@ export default function FloorPlanEditor2D({
                         })
                       }}
                     >
-                      {/* Invisible Hit Box (24x24) */}
-                      <rect x={h.x - 12} y={h.y - 12} width={24} height={24} fill="transparent" />
+                      {/* Invisible Hit Box (20x20) */}
+                      <rect x={h.x - 10} y={h.y - 10} width={20} height={20} fill="transparent" />
                       {/* Pill Shape */}
                       <rect
-                        x={h.id === 'top' || h.id === 'bottom' ? h.x - 10 : h.x - 3.5}
-                        y={h.id === 'top' || h.id === 'bottom' ? h.y - 3.5 : h.y - 10}
-                        width={h.id === 'top' || h.id === 'bottom' ? 20 : 7}
-                        height={h.id === 'top' || h.id === 'bottom' ? 7 : 20}
-                        rx={3.5}
+                        x={h.id === 'top' || h.id === 'bottom' ? h.x - 8 : h.x - 3}
+                        y={h.id === 'top' || h.id === 'bottom' ? h.y - 3 : h.y - 8}
+                        width={h.id === 'top' || h.id === 'bottom' ? 16 : 6}
+                        height={h.id === 'top' || h.id === 'bottom' ? 6 : 16}
+                        rx={3}
                         fill="#A855F7"
                         stroke="#FFFFFF"
-                        strokeWidth={1.5}
+                        strokeWidth={1}
                         className="shadow-md hover:fill-purple-400 transition-colors"
                       />
                     </g>
@@ -937,15 +1307,15 @@ export default function FloorPlanEditor2D({
                   points={newRoomPoints.map(p => `${p[0]},${p[1]}`).join(' ') + (mousePos ? ` ${mousePos[0]},${mousePos[1]}` : '')}
                   fill="none"
                   stroke="#10B981"
-                  strokeWidth={2.5}
+                  strokeWidth={2}
                   strokeDasharray="4,4"
                 />
                 {newRoomPoints.map((pt, i) => (
-                  <circle key={i} cx={pt[0]} cy={pt[1]} r={6} fill="#10B981" stroke="#FFFFFF" strokeWidth={2} />
+                  <circle key={i} cx={pt[0]} cy={pt[1]} r={4} fill="#10B981" stroke="#FFFFFF" strokeWidth={1.5} />
                 ))}
               </g>
             )}
-            {/* Magnetic Snap Visual Guide Line Overlay (#A855F7 Dashed Line) */}
+            {/* Canva Smart Alignment & Magnetic Guide Line Overlay */}
             {activeSnapTarget && (
               <g style={{ pointerEvents: 'none' }}>
                 {activeSnapTarget.guideSegment && (
@@ -954,18 +1324,18 @@ export default function FloorPlanEditor2D({
                     y1={activeSnapTarget.guideSegment.p1[1]}
                     x2={activeSnapTarget.guideSegment.p2[0]}
                     y2={activeSnapTarget.guideSegment.p2[1]}
-                    stroke="#A855F7"
-                    strokeWidth={2.5}
-                    strokeDasharray="6,3"
+                    stroke={activeSnapTarget.color || '#EC4899'}
+                    strokeWidth={1.5}
+                    strokeDasharray="5,3"
                   />
                 )}
                 <circle
                   cx={activeSnapTarget.point[0]}
                   cy={activeSnapTarget.point[1]}
-                  r={6}
-                  fill="#A855F7"
+                  r={3.5}
+                  fill={activeSnapTarget.color || '#EC4899'}
                   stroke="#FFFFFF"
-                  strokeWidth={2}
+                  strokeWidth={1.5}
                 />
               </g>
             )}

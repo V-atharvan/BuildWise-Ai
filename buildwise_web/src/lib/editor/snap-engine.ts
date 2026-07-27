@@ -35,7 +35,7 @@ export interface SnapConfig {
 
 export const DEFAULT_SNAP_CONFIG: SnapConfig = {
   enabled: true,
-  snapRadiusPx: 18, // Medium power attraction (18px screen radius)
+  snapRadiusPx: 6, // Subtle, precise attraction (6px screen radius)
   enableEndpoint: true,
   enableMidpoint: true,
   enableIntersection: true,
@@ -183,8 +183,8 @@ export function findNearestSnapTarget(
     }
   })
 
-  // 0. MAGNETIC EDGE ATTRACTION (12px attraction tolerance)
-  const magRadiusWorld = 12 / Math.max(0.1, zoom)
+  // 0. MAGNETIC EDGE ATTRACTION (5px attraction tolerance)
+  const magRadiusWorld = 5 / Math.max(0.1, zoom)
   let bestMagnetic: SnapTarget | null = null
   let minMagDist = magRadiusWorld
 
@@ -377,4 +377,141 @@ export function findNearestSnapTarget(
 
   if (bestMagnetic) return bestMagnetic
   return null
+}
+
+// ── Canva Smart Edge Alignment & Magnetism ─────────────────────────────────
+
+export interface CanvaAlignmentResult {
+  snappedPos: number
+  guideSegment?: { p1: [number, number]; p2: [number, number] }
+  label: string
+}
+
+export function findCanvaEdgeMagneticSnap(
+  handle: 'top' | 'bottom' | 'left' | 'right',
+  currentVal: number,
+  initialBounds: { minX: number; maxX: number; minY: number; maxY: number },
+  rooms: AIRoom[],
+  walls: AIWall[],
+  ignoreRoomId: string,
+  tolerancePx: number = 8
+): CanvaAlignmentResult | null {
+  const isVertical = handle === 'left' || handle === 'right'
+  let bestDist = tolerancePx
+  let bestVal: number | null = null
+  let bestGuide: { p1: [number, number]; p2: [number, number] } | null = null
+  let bestLabel = ''
+
+  const targets: { coord: number; minOther: number; maxOther: number; label: string }[] = []
+
+  rooms.forEach(r => {
+    if (r.id === ignoreRoomId || !r.polygon) return
+    const poly = r.polygon
+    for (let i = 0; i < poly.length; i++) {
+      const p1 = poly[i]
+      const p2 = poly[(i + 1) % poly.length]
+
+      if (isVertical && Math.abs(p1[0] - p2[0]) < 1e-3) {
+        const targetX = p1[0]
+        const minY = Math.min(p1[1], p2[1])
+        const maxY = Math.max(p1[1], p2[1])
+        targets.push({ coord: targetX, minOther: minY, maxOther: maxY, label: `Boundary Snap` })
+      } else if (!isVertical && Math.abs(p1[1] - p2[1]) < 1e-3) {
+        const targetY = p1[1]
+        const minX = Math.min(p1[0], p2[0])
+        const maxX = Math.max(p1[0], p2[0])
+        targets.push({ coord: targetY, minOther: minX, maxOther: maxX, label: `Boundary Snap` })
+      }
+    }
+  })
+
+  walls.forEach(w => {
+    if (!w.start || !w.end) return
+    if (isVertical && Math.abs(w.start[0] - w.end[0]) < 1e-3) {
+      const targetX = w.start[0]
+      const minY = Math.min(w.start[1], w.end[1])
+      const maxY = Math.max(w.start[1], w.end[1])
+      targets.push({ coord: targetX, minOther: minY, maxOther: maxY, label: 'Wall Alignment' })
+    } else if (!isVertical && Math.abs(w.start[1] - w.end[1]) < 1e-3) {
+      const targetY = w.start[1]
+      const minX = Math.min(w.start[0], w.end[0])
+      const maxX = Math.max(w.start[0], w.end[0])
+      targets.push({ coord: targetY, minOther: minX, maxOther: maxX, label: 'Wall Alignment' })
+    }
+  })
+
+  for (const t of targets) {
+    const dist = Math.abs(currentVal - t.coord)
+    if (dist < bestDist) {
+      bestDist = dist
+      bestVal = t.coord
+      bestLabel = t.label
+      if (isVertical) {
+        const guideMinY = Math.min(initialBounds.minY, t.minOther) - 15
+        const guideMaxY = Math.max(initialBounds.maxY, t.maxOther) + 15
+        bestGuide = { p1: [t.coord, guideMinY], p2: [t.coord, guideMaxY] }
+      } else {
+        const guideMinX = Math.min(initialBounds.minX, t.minOther) - 15
+        const guideMaxX = Math.max(initialBounds.maxX, t.maxOther) + 15
+        bestGuide = { p1: [guideMinX, t.coord], p2: [guideMaxX, t.coord] }
+      }
+    }
+  }
+
+  if (bestVal !== null && bestGuide) {
+    return { snappedPos: bestVal, guideSegment: bestGuide, label: bestLabel }
+  }
+  return null
+}
+
+// ── Door & Window Wall Line Magnetism ───────────────────────────────────────
+
+export interface DoorWindowSnapResult {
+  center: [number, number]
+  guideSegment: { p1: [number, number]; p2: [number, number] }
+  label: string
+}
+
+export function findDoorWindowSnapTarget(
+  mousePos: [number, number],
+  rooms: AIRoom[],
+  walls: AIWall[],
+  tolerancePx: number = 14
+): DoorWindowSnapResult | null {
+  const allSegments: { p1: [number, number]; p2: [number, number]; id: string; label: string }[] = []
+
+  rooms.forEach(r => {
+    const poly = r.polygon || []
+    for (let i = 0; i < poly.length; i++) {
+      allSegments.push({
+        p1: poly[i],
+        p2: poly[(i + 1) % poly.length],
+        id: r.id,
+        label: `Boundary of ${r.label}`,
+      })
+    }
+  })
+
+  walls.forEach(w => {
+    if (w.start && w.end) {
+      allSegments.push({ p1: w.start, p2: w.end, id: w.id, label: 'Wall Vector' })
+    }
+  })
+
+  let bestDist = tolerancePx
+  let bestResult: DoorWindowSnapResult | null = null
+
+  for (const seg of allSegments) {
+    const { dist, proj } = pointToSegmentDistance(mousePos, seg.p1, seg.p2)
+    if (dist < bestDist) {
+      bestDist = dist
+      bestResult = {
+        center: [Math.round(proj[0]), Math.round(proj[1])],
+        guideSegment: { p1: seg.p1, p2: seg.p2 },
+        label: seg.label,
+      }
+    }
+  }
+
+  return bestResult
 }
