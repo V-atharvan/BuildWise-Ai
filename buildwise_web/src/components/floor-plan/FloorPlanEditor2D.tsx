@@ -208,14 +208,33 @@ export default function FloorPlanEditor2D({
   const calculatePolygonAreaM2Ref = useRef(calculatePolygonAreaM2)
   calculatePolygonAreaM2Ref.current = calculatePolygonAreaM2
 
-  // ── Mouse & Drag Event Handlers ─────────────────────────────────────────────
-  const getCanvasCoords = (e: React.MouseEvent): [number, number] | null => {
+  // ── Mouse & Touch Event Coordinate Extractor ────────────────────────────────
+  const getCanvasCoords = (
+    e: React.MouseEvent | React.TouchEvent | MouseEvent | TouchEvent
+  ): [number, number] | null => {
     if (!containerRef.current) return null
     const rect = containerRef.current.getBoundingClientRect()
     const scaleX = imgDimensions.w / rect.width
     const scaleY = imgDimensions.h / rect.height
-    const x = Math.round((e.clientX - rect.left) * scaleX)
-    const y = Math.round((e.clientY - rect.top) * scaleY)
+
+    let clientX = 0
+    let clientY = 0
+
+    if ('touches' in e && e.touches && e.touches.length > 0) {
+      clientX = e.touches[0].clientX
+      clientY = e.touches[0].clientY
+    } else if ('changedTouches' in e && e.changedTouches && e.changedTouches.length > 0) {
+      clientX = e.changedTouches[0].clientX
+      clientY = e.changedTouches[0].clientY
+    } else if ('clientX' in e && typeof e.clientX === 'number') {
+      clientX = e.clientX
+      clientY = e.clientY
+    } else {
+      return null
+    }
+
+    const x = Math.round((clientX - rect.left) * scaleX)
+    const y = Math.round((clientY - rect.top) * scaleY)
     return [x, y]
   }
 
@@ -223,13 +242,14 @@ export default function FloorPlanEditor2D({
   useEffect(() => {
     if (!draggedVertex) return
 
-    const handleWindowMouseMove = (e: MouseEvent) => {
-      if (!containerRef.current) return
-      const rect = containerRef.current.getBoundingClientRect()
-      const scaleX = imgDimensions.w / rect.width
-      const scaleY = imgDimensions.h / rect.height
-      const x = Math.min(imgDimensions.w, Math.max(0, Math.round((e.clientX - rect.left) * scaleX)))
-      const y = Math.min(imgDimensions.h, Math.max(0, Math.round((e.clientY - rect.top) * scaleY)))
+    const handleWindowMove = (e: MouseEvent | TouchEvent) => {
+      if (e.type === 'touchmove') e.preventDefault()
+      const coords = getCanvasCoords(e)
+      if (!coords) return
+      const [x, y] = [
+        Math.min(imgDimensions.w, Math.max(0, coords[0])),
+        Math.min(imgDimensions.h, Math.max(0, coords[1])),
+      ]
 
       const rawCoords: [number, number] = [x, y]
       const snapTarget = findNearestSnapTarget(rawCoords, roomsRef.current, wallsRef.current, 1, pxPerMeterRef.current)
@@ -250,7 +270,7 @@ export default function FloorPlanEditor2D({
       }))
     }
 
-    const handleWindowMouseUp = () => {
+    const handleWindowUp = () => {
       setDraggedVertex(null)
       setActiveSnapTarget(null)
       setRooms(latestRooms => {
@@ -259,11 +279,17 @@ export default function FloorPlanEditor2D({
       })
     }
 
-    window.addEventListener('mousemove', handleWindowMouseMove)
-    window.addEventListener('mouseup', handleWindowMouseUp)
+    window.addEventListener('mousemove', handleWindowMove)
+    window.addEventListener('touchmove', handleWindowMove, { passive: false })
+    window.addEventListener('mouseup', handleWindowUp)
+    window.addEventListener('touchend', handleWindowUp)
+    window.addEventListener('touchcancel', handleWindowUp)
     return () => {
-      window.removeEventListener('mousemove', handleWindowMouseMove)
-      window.removeEventListener('mouseup', handleWindowMouseUp)
+      window.removeEventListener('mousemove', handleWindowMove)
+      window.removeEventListener('touchmove', handleWindowMove)
+      window.removeEventListener('mouseup', handleWindowUp)
+      window.removeEventListener('touchend', handleWindowUp)
+      window.removeEventListener('touchcancel', handleWindowUp)
     }
   }, [draggedVertex, imgDimensions])
 
@@ -271,13 +297,14 @@ export default function FloorPlanEditor2D({
   useEffect(() => {
     if (!draggedEdgeHandle) return
 
-    const handleWindowMouseMove = (e: MouseEvent) => {
-      if (!containerRef.current) return
-      const rect = containerRef.current.getBoundingClientRect()
-      const scaleX = imgDimensions.w / rect.width
-      const scaleY = imgDimensions.h / rect.height
-      const x = Math.min(imgDimensions.w, Math.max(0, Math.round((e.clientX - rect.left) * scaleX)))
-      const y = Math.min(imgDimensions.h, Math.max(0, Math.round((e.clientY - rect.top) * scaleY)))
+    const handleWindowMove = (e: MouseEvent | TouchEvent) => {
+      if (e.type === 'touchmove') e.preventDefault()
+      const coords = getCanvasCoords(e)
+      if (!coords) return
+      const [x, y] = [
+        Math.min(imgDimensions.w, Math.max(0, coords[0])),
+        Math.min(imgDimensions.h, Math.max(0, coords[1])),
+      ]
 
       const dx = x - draggedEdgeHandle.startMousePos[0]
       const dy = y - draggedEdgeHandle.startMousePos[1]
@@ -339,7 +366,7 @@ export default function FloorPlanEditor2D({
       }))
     }
 
-    const handleWindowMouseUp = () => {
+    const handleWindowUp = () => {
       setDraggedEdgeHandle(null)
       setActiveSnapTarget(null)
       setRooms(latestRooms => {
@@ -348,11 +375,17 @@ export default function FloorPlanEditor2D({
       })
     }
 
-    window.addEventListener('mousemove', handleWindowMouseMove)
-    window.addEventListener('mouseup', handleWindowMouseUp)
+    window.addEventListener('mousemove', handleWindowMove)
+    window.addEventListener('touchmove', handleWindowMove, { passive: false })
+    window.addEventListener('mouseup', handleWindowUp)
+    window.addEventListener('touchend', handleWindowUp)
+    window.addEventListener('touchcancel', handleWindowUp)
     return () => {
-      window.removeEventListener('mousemove', handleWindowMouseMove)
-      window.removeEventListener('mouseup', handleWindowMouseUp)
+      window.removeEventListener('mousemove', handleWindowMove)
+      window.removeEventListener('touchmove', handleWindowMove)
+      window.removeEventListener('mouseup', handleWindowUp)
+      window.removeEventListener('touchend', handleWindowUp)
+      window.removeEventListener('touchcancel', handleWindowUp)
     }
   }, [draggedEdgeHandle, imgDimensions])
 
@@ -360,13 +393,14 @@ export default function FloorPlanEditor2D({
   useEffect(() => {
     if (!draggedElement) return
 
-    const handleWindowMouseMove = (e: MouseEvent) => {
-      if (!containerRef.current) return
-      const rect = containerRef.current.getBoundingClientRect()
-      const scaleX = imgDimensions.w / rect.width
-      const scaleY = imgDimensions.h / rect.height
-      const x = Math.min(imgDimensions.w, Math.max(0, Math.round((e.clientX - rect.left) * scaleX)))
-      const y = Math.min(imgDimensions.h, Math.max(0, Math.round((e.clientY - rect.top) * scaleY)))
+    const handleWindowMove = (e: MouseEvent | TouchEvent) => {
+      if (e.type === 'touchmove') e.preventDefault()
+      const coords = getCanvasCoords(e)
+      if (!coords) return
+      const [x, y] = [
+        Math.min(imgDimensions.w, Math.max(0, coords[0])),
+        Math.min(imgDimensions.h, Math.max(0, coords[1])),
+      ]
 
       const rawPos: [number, number] = [x, y]
       const snapResult = findDoorWindowSnapTarget(rawPos, roomsRef.current, wallsRef.current, 14)
@@ -392,16 +426,22 @@ export default function FloorPlanEditor2D({
       }
     }
 
-    const handleWindowMouseUp = () => {
+    const handleWindowUp = () => {
       setDraggedElement(null)
       setActiveSnapTarget(null)
     }
 
-    window.addEventListener('mousemove', handleWindowMouseMove)
-    window.addEventListener('mouseup', handleWindowMouseUp)
+    window.addEventListener('mousemove', handleWindowMove)
+    window.addEventListener('touchmove', handleWindowMove, { passive: false })
+    window.addEventListener('mouseup', handleWindowUp)
+    window.addEventListener('touchend', handleWindowUp)
+    window.addEventListener('touchcancel', handleWindowUp)
     return () => {
-      window.removeEventListener('mousemove', handleWindowMouseMove)
-      window.removeEventListener('mouseup', handleWindowMouseUp)
+      window.removeEventListener('mousemove', handleWindowMove)
+      window.removeEventListener('touchmove', handleWindowMove)
+      window.removeEventListener('mouseup', handleWindowUp)
+      window.removeEventListener('touchend', handleWindowUp)
+      window.removeEventListener('touchcancel', handleWindowUp)
     }
   }, [draggedElement, imgDimensions])
 
@@ -409,13 +449,14 @@ export default function FloorPlanEditor2D({
   useEffect(() => {
     if (!draggedRoom) return
 
-    const handleWindowMouseMove = (e: MouseEvent) => {
-      if (!containerRef.current) return
-      const rect = containerRef.current.getBoundingClientRect()
-      const scaleX = imgDimensions.w / rect.width
-      const scaleY = imgDimensions.h / rect.height
-      const x = Math.min(imgDimensions.w, Math.max(0, Math.round((e.clientX - rect.left) * scaleX)))
-      const y = Math.min(imgDimensions.h, Math.max(0, Math.round((e.clientY - rect.top) * scaleY)))
+    const handleWindowMove = (e: MouseEvent | TouchEvent) => {
+      if (e.type === 'touchmove') e.preventDefault()
+      const coords = getCanvasCoords(e)
+      if (!coords) return
+      const [x, y] = [
+        Math.min(imgDimensions.w, Math.max(0, coords[0])),
+        Math.min(imgDimensions.h, Math.max(0, coords[1])),
+      ]
 
       const dx = x - draggedRoom.startMousePos[0]
       const dy = y - draggedRoom.startMousePos[1]
@@ -459,7 +500,7 @@ export default function FloorPlanEditor2D({
       }))
     }
 
-    const handleWindowMouseUp = () => {
+    const handleWindowUp = () => {
       setDraggedRoom(null)
       setActiveSnapTarget(null)
       setRooms(latestRooms => {
@@ -468,11 +509,17 @@ export default function FloorPlanEditor2D({
       })
     }
 
-    window.addEventListener('mousemove', handleWindowMouseMove)
-    window.addEventListener('mouseup', handleWindowMouseUp)
+    window.addEventListener('mousemove', handleWindowMove)
+    window.addEventListener('touchmove', handleWindowMove, { passive: false })
+    window.addEventListener('mouseup', handleWindowUp)
+    window.addEventListener('touchend', handleWindowUp)
+    window.addEventListener('touchcancel', handleWindowUp)
     return () => {
-      window.removeEventListener('mousemove', handleWindowMouseMove)
-      window.removeEventListener('mouseup', handleWindowMouseUp)
+      window.removeEventListener('mousemove', handleWindowMove)
+      window.removeEventListener('touchmove', handleWindowMove)
+      window.removeEventListener('mouseup', handleWindowUp)
+      window.removeEventListener('touchend', handleWindowUp)
+      window.removeEventListener('touchcancel', handleWindowUp)
     }
   }, [draggedRoom, imgDimensions])
 
@@ -480,13 +527,14 @@ export default function FloorPlanEditor2D({
   useEffect(() => {
     if (!draggedWall) return
 
-    const handleWindowMouseMove = (e: MouseEvent) => {
-      if (!containerRef.current) return
-      const rect = containerRef.current.getBoundingClientRect()
-      const scaleX = imgDimensions.w / rect.width
-      const scaleY = imgDimensions.h / rect.height
-      const x = Math.min(imgDimensions.w, Math.max(0, Math.round((e.clientX - rect.left) * scaleX)))
-      const y = Math.min(imgDimensions.h, Math.max(0, Math.round((e.clientY - rect.top) * scaleY)))
+    const handleWindowMove = (e: MouseEvent | TouchEvent) => {
+      if (e.type === 'touchmove') e.preventDefault()
+      const coords = getCanvasCoords(e)
+      if (!coords) return
+      const [x, y] = [
+        Math.min(imgDimensions.w, Math.max(0, coords[0])),
+        Math.min(imgDimensions.h, Math.max(0, coords[1])),
+      ]
 
       const dx = x - draggedWall.startMousePos[0]
       const dy = y - draggedWall.startMousePos[1]
@@ -501,15 +549,21 @@ export default function FloorPlanEditor2D({
       }))
     }
 
-    const handleWindowMouseUp = () => {
+    const handleWindowUp = () => {
       setDraggedWall(null)
     }
 
-    window.addEventListener('mousemove', handleWindowMouseMove)
-    window.addEventListener('mouseup', handleWindowMouseUp)
+    window.addEventListener('mousemove', handleWindowMove)
+    window.addEventListener('touchmove', handleWindowMove, { passive: false })
+    window.addEventListener('mouseup', handleWindowUp)
+    window.addEventListener('touchend', handleWindowUp)
+    window.addEventListener('touchcancel', handleWindowUp)
     return () => {
-      window.removeEventListener('mousemove', handleWindowMouseMove)
-      window.removeEventListener('mouseup', handleWindowMouseUp)
+      window.removeEventListener('mousemove', handleWindowMove)
+      window.removeEventListener('touchmove', handleWindowMove)
+      window.removeEventListener('mouseup', handleWindowUp)
+      window.removeEventListener('touchend', handleWindowUp)
+      window.removeEventListener('touchcancel', handleWindowUp)
     }
   }, [draggedWall, imgDimensions])
 
@@ -1034,6 +1088,7 @@ export default function FloorPlanEditor2D({
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onClick={handleCanvasClick}
+          style={{ touchAction: 'none' }}
           className="relative flex-1 bg-[#0A0A0E] flex items-center justify-center overflow-hidden cursor-crosshair min-h-[500px]"
         >
           {/* Background Floor Plan Image */}
@@ -1053,6 +1108,7 @@ export default function FloorPlanEditor2D({
           {/* SVG Vector Interactive Overlay */}
           <svg
             className="absolute inset-0 w-full h-full"
+            style={{ touchAction: 'none' }}
             viewBox={`0 0 ${imgDimensions.w} ${imgDimensions.h}`}
             preserveAspectRatio="xMidYMid meet"
           >
@@ -1064,6 +1120,21 @@ export default function FloorPlanEditor2D({
               const color = ROOM_COLORS[room.room_type] || ROOM_COLORS.unknown
               const pointsStr = poly.map(p => `${p[0]},${p[1]}`).join(' ')
 
+              const startRoomDrag = (e: React.MouseEvent | React.TouchEvent) => {
+                e.stopPropagation()
+                e.preventDefault()
+                setSelectedId(room.id)
+                setSelectedType('room')
+                const coords = getCanvasCoords(e)
+                if (coords) {
+                  setDraggedRoom({
+                    roomId: room.id,
+                    startMousePos: coords,
+                    initialPolygon: room.polygon,
+                  })
+                }
+              }
+
               return (
                 <polygon
                   key={room.id}
@@ -1074,20 +1145,8 @@ export default function FloorPlanEditor2D({
                   strokeWidth={isSelected ? 3.5 : 2}
                   strokeDasharray={isSelected ? '6,3' : 'none'}
                   className="cursor-grab active:cursor-grabbing transition-all hover:fill-opacity-35"
-                  onMouseDown={(e) => {
-                    e.stopPropagation()
-                    e.preventDefault()
-                    setSelectedId(room.id)
-                    setSelectedType('room')
-                    const coords = getCanvasCoords(e)
-                    if (coords) {
-                      setDraggedRoom({
-                        roomId: room.id,
-                        startMousePos: coords,
-                        initialPolygon: room.polygon,
-                      })
-                    }
-                  }}
+                  onMouseDown={startRoomDrag}
+                  onTouchStart={startRoomDrag}
                 />
               )
             })}
@@ -1098,25 +1157,29 @@ export default function FloorPlanEditor2D({
               const p1 = w.start
               const p2 = w.end
               if (!p1 || !p2) return null
+
+              const startWallDrag = (e: React.MouseEvent | React.TouchEvent) => {
+                e.stopPropagation()
+                e.preventDefault()
+                setSelectedId(w.id)
+                setSelectedType('wall')
+                const coords = getCanvasCoords(e)
+                if (coords && w.start && w.end) {
+                  setDraggedWall({
+                    wallId: w.id,
+                    startMousePos: coords,
+                    initialStart: w.start,
+                    initialEnd: w.end,
+                  })
+                }
+              }
+
               return (
                 <g
                   key={w.id}
                   className="cursor-grab active:cursor-grabbing"
-                  onMouseDown={(e) => {
-                    e.stopPropagation()
-                    e.preventDefault()
-                    setSelectedId(w.id)
-                    setSelectedType('wall')
-                    const coords = getCanvasCoords(e)
-                    if (coords && w.start && w.end) {
-                      setDraggedWall({
-                        wallId: w.id,
-                        startMousePos: coords,
-                        initialStart: w.start,
-                        initialEnd: w.end,
-                      })
-                    }
-                  }}
+                  onMouseDown={startWallDrag}
+                  onTouchStart={startWallDrag}
                 >
                   <line
                     x1={p1[0]} y1={p1[1]} x2={p2[0]} y2={p2[1]}
@@ -1136,20 +1199,24 @@ export default function FloorPlanEditor2D({
             {doors.map(door => {
               const isSelected = selectedId === door.id && selectedType === 'door'
               const [cx, cy] = door.center
+
+              const startDoorDrag = (e: React.MouseEvent | React.TouchEvent) => {
+                e.stopPropagation()
+                e.preventDefault()
+                setSelectedId(door.id)
+                setSelectedType('door')
+                setDraggedElement({ id: door.id, type: 'door' })
+              }
+
               return (
                 <g
                   key={door.id}
                   className="cursor-grab active:cursor-grabbing"
-                  onMouseDown={(e) => {
-                    e.stopPropagation()
-                    e.preventDefault()
-                    setSelectedId(door.id)
-                    setSelectedType('door')
-                    setDraggedElement({ id: door.id, type: 'door' })
-                  }}
+                  onMouseDown={startDoorDrag}
+                  onTouchStart={startDoorDrag}
                 >
-                  {/* Invisible Hit Target */}
-                  <circle cx={cx} cy={cy} r={12} fill="transparent" />
+                  {/* Touch-Friendly Invisible Hit Target (36px Diameter) */}
+                  <circle cx={cx} cy={cy} r={18} fill="transparent" />
                   <circle cx={cx} cy={cy} r={7.5} fill="#F59E0B" fillOpacity={isSelected ? 0.95 : 0.85} stroke="#FFFFFF" strokeWidth={1.5} />
                   <text x={cx} y={cy + 2.5} textAnchor="middle" fill="#FFFFFF" fontSize={8} fontWeight="black" style={{ pointerEvents: 'none' }}>D</text>
                 </g>
@@ -1160,20 +1227,24 @@ export default function FloorPlanEditor2D({
             {windows.map(win => {
               const isSelected = selectedId === win.id && selectedType === 'window'
               const [cx, cy] = win.center
+
+              const startWindowDrag = (e: React.MouseEvent | React.TouchEvent) => {
+                e.stopPropagation()
+                e.preventDefault()
+                setSelectedId(win.id)
+                setSelectedType('window')
+                setDraggedElement({ id: win.id, type: 'window' })
+              }
+
               return (
                 <g
                   key={win.id}
                   className="cursor-grab active:cursor-grabbing"
-                  onMouseDown={(e) => {
-                    e.stopPropagation()
-                    e.preventDefault()
-                    setSelectedId(win.id)
-                    setSelectedType('window')
-                    setDraggedElement({ id: win.id, type: 'window' })
-                  }}
+                  onMouseDown={startWindowDrag}
+                  onTouchStart={startWindowDrag}
                 >
-                  {/* Invisible Hit Target */}
-                  <rect x={cx - 10} y={cy - 9} width={20} height={18} fill="transparent" />
+                  {/* Touch-Friendly Invisible Hit Target */}
+                  <rect x={cx - 14} y={cy - 14} width={28} height={28} fill="transparent" />
                   <rect x={cx - 7} y={cy - 6} width={14} height={12} rx={3} fill="#3B82F6" fillOpacity={isSelected ? 0.95 : 0.85} stroke="#FFFFFF" strokeWidth={1.5} />
                   <text x={cx} y={cy + 2.5} textAnchor="middle" fill="#FFFFFF" fontSize={7.5} fontWeight="black" style={{ pointerEvents: 'none' }}>W</text>
                 </g>
@@ -1187,25 +1258,29 @@ export default function FloorPlanEditor2D({
               const color = ROOM_COLORS[room.room_type] || ROOM_COLORS.unknown
               const cx = poly.reduce((s, p) => s + p[0], 0) / poly.length
               const cy = poly.reduce((s, p) => s + p[1], 0) / poly.length
+
+              const startBadgeDrag = (e: React.MouseEvent | React.TouchEvent) => {
+                e.stopPropagation()
+                e.preventDefault()
+                setSelectedId(room.id)
+                setSelectedType('room')
+                const coords = getCanvasCoords(e)
+                if (coords) {
+                  setDraggedRoom({
+                    roomId: room.id,
+                    startMousePos: coords,
+                    initialPolygon: room.polygon,
+                  })
+                }
+              }
+
               return (
                 <g
                   key={`label-${room.id}`}
                   transform={`translate(${cx}, ${cy})`}
                   className="cursor-grab active:cursor-grabbing"
-                  onMouseDown={(e) => {
-                    e.stopPropagation()
-                    e.preventDefault()
-                    setSelectedId(room.id)
-                    setSelectedType('room')
-                    const coords = getCanvasCoords(e)
-                    if (coords) {
-                      setDraggedRoom({
-                        roomId: room.id,
-                        startMousePos: coords,
-                        initialPolygon: room.polygon,
-                      })
-                    }
-                  }}
+                  onMouseDown={startBadgeDrag}
+                  onTouchStart={startBadgeDrag}
                 >
                   <rect x={-32} y={-10} width={64} height={20} rx={4} fill="#1E1E24" fillOpacity={0.75} stroke={color} strokeWidth={1} />
                   <text x={0} y={-1} textAnchor="middle" fill="#FFFFFF" fontSize={9.5} fontWeight="bold" style={{ pointerEvents: 'none' }}>{room.label}</text>
@@ -1235,59 +1310,69 @@ export default function FloorPlanEditor2D({
 
               return (
                 <g key={`handles-${room.id}`}>
-                  {/* Sleek Resized Corner Handle Dots */}
-                  {poly.map((pt, idx) => (
-                    <g
-                      key={`vertex-${idx}`}
-                      className="cursor-grab active:cursor-grabbing"
-                      onMouseDown={(e) => {
-                        e.stopPropagation()
-                        e.preventDefault()
-                        setDraggedVertex({ roomId: room.id, vertexIdx: idx })
-                      }}
-                    >
-                      {/* Invisible Touch Hit Target */}
-                      <circle cx={pt[0]} cy={pt[1]} r={10} fill="transparent" />
-                      {/* Sleek Outer Glow */}
-                      <circle cx={pt[0]} cy={pt[1]} r={4} fill="#A855F7" fillOpacity={0.25} />
-                      {/* Sleek Crisp Corner Dot */}
-                      <circle cx={pt[0]} cy={pt[1]} r={2.5} fill="#A855F7" stroke="#FFFFFF" strokeWidth={1} />
-                    </g>
-                  ))}
+                  {/* Sleek Resized Corner Handle Dots with Touch Target */}
+                  {poly.map((pt, idx) => {
+                    const startVertexDrag = (e: React.MouseEvent | React.TouchEvent) => {
+                      e.stopPropagation()
+                      e.preventDefault()
+                      setDraggedVertex({ roomId: room.id, vertexIdx: idx })
+                    }
+
+                    return (
+                      <g
+                        key={`vertex-${idx}`}
+                        className="cursor-grab active:cursor-grabbing"
+                        onMouseDown={startVertexDrag}
+                        onTouchStart={startVertexDrag}
+                      >
+                        {/* Touch-Friendly Invisible Touch Target (36px Diameter) */}
+                        <circle cx={pt[0]} cy={pt[1]} r={18} fill="transparent" />
+                        {/* Sleek Outer Glow */}
+                        <circle cx={pt[0]} cy={pt[1]} r={4} fill="#A855F7" fillOpacity={0.25} />
+                        {/* Sleek Crisp Corner Dot */}
+                        <circle cx={pt[0]} cy={pt[1]} r={2.5} fill="#A855F7" stroke="#FFFFFF" strokeWidth={1} />
+                      </g>
+                    )
+                  })}
 
                   {/* Canva Pill-Shaped Mid-Edge Stretch Handles ([=]) */}
-                  {edgeHandles.map(h => (
-                    <g
-                      key={`edge-${h.id}`}
-                      className="cursor-pointer"
-                      onMouseDown={(e) => {
-                        e.stopPropagation()
-                        e.preventDefault()
-                        setDraggedEdgeHandle({
-                          roomId: room.id,
-                          handle: h.id,
-                          startMousePos: [h.x, h.y],
-                          initialPolygon: poly,
-                          initialBounds: { minX, maxX, minY, maxY },
-                        })
-                      }}
-                    >
-                      {/* Invisible Hit Box (20x20) */}
-                      <rect x={h.x - 10} y={h.y - 10} width={20} height={20} fill="transparent" />
-                      {/* Pill Shape */}
-                      <rect
-                        x={h.id === 'top' || h.id === 'bottom' ? h.x - 8 : h.x - 3}
-                        y={h.id === 'top' || h.id === 'bottom' ? h.y - 3 : h.y - 8}
-                        width={h.id === 'top' || h.id === 'bottom' ? 16 : 6}
-                        height={h.id === 'top' || h.id === 'bottom' ? 6 : 16}
-                        rx={3}
-                        fill="#A855F7"
-                        stroke="#FFFFFF"
-                        strokeWidth={1}
-                        className="shadow-md hover:fill-purple-400 transition-colors"
-                      />
-                    </g>
-                  ))}
+                  {edgeHandles.map(h => {
+                    const startEdgeDrag = (e: React.MouseEvent | React.TouchEvent) => {
+                      e.stopPropagation()
+                      e.preventDefault()
+                      setDraggedEdgeHandle({
+                        roomId: room.id,
+                        handle: h.id,
+                        startMousePos: [h.x, h.y],
+                        initialPolygon: poly,
+                        initialBounds: { minX, maxX, minY, maxY },
+                      })
+                    }
+
+                    return (
+                      <g
+                        key={`edge-${h.id}`}
+                        className="cursor-pointer"
+                        onMouseDown={startEdgeDrag}
+                        onTouchStart={startEdgeDrag}
+                      >
+                        {/* Touch-Friendly Invisible Hit Box (32x32) */}
+                        <rect x={h.x - 16} y={h.y - 16} width={32} height={32} fill="transparent" />
+                        {/* Pill Shape */}
+                        <rect
+                          x={h.id === 'top' || h.id === 'bottom' ? h.x - 8 : h.x - 3}
+                          y={h.id === 'top' || h.id === 'bottom' ? h.y - 3 : h.y - 8}
+                          width={h.id === 'top' || h.id === 'bottom' ? 16 : 6}
+                          height={h.id === 'top' || h.id === 'bottom' ? 6 : 16}
+                          rx={3}
+                          fill="#A855F7"
+                          stroke="#FFFFFF"
+                          strokeWidth={1}
+                          className="shadow-md hover:fill-purple-400 transition-colors"
+                        />
+                      </g>
+                    )
+                  })}
                 </g>
               )
             })}
