@@ -484,7 +484,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen>
       decoration: BoxDecoration(
         color: const Color(0x1519191E),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: border.withOpacity(1.5)),
+        border: Border.all(color: border),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.3),

@@ -38,9 +38,9 @@ class UploadState {
 }
 
 class UploadNotifier extends StateNotifier<UploadState> {
-  final ApiClient _client;
+  final ApiClient? _client;
 
-  UploadNotifier(this._client) : super(const UploadState());
+  UploadNotifier([this._client]) : super(const UploadState());
 
   Future<PlanModel?> uploadPlanFile(File file, String projectId) async {
     state = UploadState(isUploading: true, uploadProgress: 0.0);
@@ -51,11 +51,13 @@ class UploadNotifier extends StateNotifier<UploadState> {
         'file': await MultipartFile.fromFile(file.path, filename: filename),
       });
 
-      final response = await _client.post(
+      final response = await _client?.post(
         ApiEndpoints.uploadPlan,
         data: formData,
         options: Options(contentType: 'multipart/form-data'),
       );
+
+      if (response == null) return null;
 
       final plan = PlanModel.fromJson(response.data as Map<String, dynamic>);
       state = UploadState(plan: plan, isUploading: false);
@@ -69,7 +71,8 @@ class UploadNotifier extends StateNotifier<UploadState> {
   Future<PlanModel?> startPlanAnalysis(String planId) async {
     state = state.copyWith(isAnalyzing: true);
     try {
-      final response = await _client.post(ApiEndpoints.analyzePlan(planId));
+      final response = await _client?.post(ApiEndpoints.analyzePlan(planId));
+      if (response == null) return null;
       final plan = PlanModel.fromJson(response.data as Map<String, dynamic>);
       state = state.copyWith(plan: plan, isAnalyzing: false);
       return plan;
@@ -81,7 +84,8 @@ class UploadNotifier extends StateNotifier<UploadState> {
 
   Future<PlanModel?> pollAnalysisStatus(String planId) async {
     try {
-      final response = await _client.get(ApiEndpoints.analysisStatus(planId));
+      final response = await _client?.get(ApiEndpoints.analysisStatus(planId));
+      if (response == null) return null;
       final plan = PlanModel.fromJson(response.data as Map<String, dynamic>);
       state = state.copyWith(plan: plan);
       return plan;
@@ -89,6 +93,42 @@ class UploadNotifier extends StateNotifier<UploadState> {
       state = state.copyWith(errorMessage: e.toString());
       return null;
     }
+  }
+  bool validateFileExtension(String filename) {
+    final ext = filename.split('.').last.toLowerCase();
+    const allowed = ['png', 'jpg', 'jpeg', 'pdf', 'dwg', 'dxf'];
+    return allowed.contains(ext);
+  }
+
+  bool validateFileSize(int sizeBytes) {
+    const maxSizeBytes = 50 * 1024 * 1024; // 50MB
+    return sizeBytes > 0 && sizeBytes <= maxSizeBytes;
+  }
+
+  Future<void> simulateUpload(String filename, int sizeBytes) async {
+    if (!validateFileExtension(filename)) {
+      state = state.copyWith(errorMessage: 'Unsupported file format: $filename');
+      return;
+    }
+    if (!validateFileSize(sizeBytes)) {
+      state = state.copyWith(errorMessage: 'File size exceeds 50MB limit');
+      return;
+    }
+    state = state.copyWith(isUploading: true, uploadProgress: 0.5);
+    await Future.delayed(const Duration(milliseconds: 10));
+    state = state.copyWith(
+      isUploading: false,
+      uploadProgress: 1.0,
+      plan: PlanModel(
+        id: 'plan_simulated',
+        projectId: 'proj_simulated',
+        filename: filename,
+        fileUrl: 'https://storage.buildwise.ai/$filename',
+        fileType: filename.split('.').last,
+        status: 'uploaded',
+        createdAt: DateTime.now(),
+      ),
+    );
   }
 }
 

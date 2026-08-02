@@ -15,7 +15,9 @@ import '../../features/upload/presentation/screens/upload_screen.dart';
 import '../../features/ai_assistant/presentation/screens/ai_chat_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/analysis/presentation/screens/cv_analysis_screen.dart';
+import '../../features/editor/presentation/screens/floor_plan_editor_screen.dart';
 import '../../features/estimation/presentation/screens/boq_materials_screen.dart';
+import '../../features/three_d/presentation/screens/building_3d_viewer_screen.dart';
 import '../widgets/buildwise_bottom_nav.dart';
 
 // Key for navigation
@@ -66,6 +68,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         },
       ),
 
+      // 2D Floor Plan Editor (full-screen CAD editor, no bottom nav)
+      GoRoute(
+        path: '/editor/:planId',
+        builder: (context, state) {
+          final planId = state.pathParameters['planId'] ?? '';
+          return FloorPlanEditorScreen(planId: planId);
+        },
+      ),
+
       // BOQ Materials (full-screen, no bottom nav)
       GoRoute(
         path: '/boq',
@@ -75,6 +86,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             projectName: extra['projectName'] as String? ?? 'Project',
             totalCost: (extra['totalCost'] as num?)?.toDouble() ?? 0.0,
           );
+        },
+      ),
+
+      // 3D Building Viewer (full-screen 3D CAD viewer, no bottom nav)
+      GoRoute(
+        path: '/3d-building/:projectId',
+        builder: (context, state) {
+          final projectId = state.pathParameters['projectId'] ?? '';
+          return Building3DViewerScreen(projectId: projectId);
         },
       ),
 
