@@ -154,3 +154,133 @@ export async function getPlanRecord(id: string): Promise<any | null> {
 
   return null
 }
+
+// ── Vector SVG floor plan generator (Fallback if raw raster file is missing) ─
+export function generateVectorFloorPlanSvg(detectedData: any): string {
+  const rooms = detectedData?.rooms || []
+  const walls = detectedData?.walls || []
+  const doors = detectedData?.doors || []
+  const windows = detectedData?.windows || []
+
+  let maxX = 800
+  let maxY = 600
+  rooms.forEach((r: any) => {
+    if (r.polygon) {
+      r.polygon.forEach(([ptX, ptY]: [number, number]) => {
+        if (ptX > maxX) maxX = ptX
+        if (ptY > maxY) maxY = ptY
+      })
+    }
+  })
+
+  const svgWidth = Math.max(maxX + 40, 800)
+  const svgHeight = Math.max(maxY + 40, 600)
+
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgWidth} ${svgHeight}" width="100%" height="100%" style="background:#f8fafc; font-family:sans-serif;">`
+  svg += `<defs><pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e2e8f0" stroke-width="1"/></pattern></defs>`
+  svg += `<rect width="100%" height="100%" fill="url(#grid)" />`
+  svg += `<text x="20" y="30" font-size="14" font-weight="bold" fill="#4f46e5">BUILDWISE AI — RECONSTRUCTED ARCHITECTURAL FLOOR PLAN</text>`
+
+  rooms.forEach((r: any, idx: number) => {
+    if (r.polygon && r.polygon.length >= 3) {
+      const pointsStr = r.polygon.map(([px, py]: [number, number]) => `${px},${py}`).join(' ')
+      svg += `<polygon points="${pointsStr}" fill="rgba(124, 58, 237, 0.12)" stroke="#7c3aed" stroke-width="2.5" stroke-linejoin="round" />`
+      const avgX = r.polygon.reduce((acc: number, p: any) => acc + p[0], 0) / r.polygon.length
+      const avgY = r.polygon.reduce((acc: number, p: any) => acc + p[1], 0) / r.polygon.length
+      const roomLabel = r.label || r.room_name || `Room ${idx + 1}`
+      const areaText = r.area_m2 ? `${r.area_m2.toFixed(1)} m²` : ''
+      svg += `<text x="${avgX}" y="${avgY - 4}" font-size="12" font-weight="bold" fill="#1e1b4b" text-anchor="middle">${roomLabel}</text>`
+      if (areaText) {
+        svg += `<text x="${avgX}" y="${avgY + 12}" font-size="10" fill="#6366f1" text-anchor="middle">${areaText}</text>`
+      }
+    }
+  })
+
+  walls.forEach((w: any) => {
+    if (w.start && w.end) {
+      const [x1, y1] = w.start
+      const [x2, y2] = w.end
+      const strokeW = w.wall_type === 'external' ? 5 : 3
+      const color = w.wall_type === 'external' ? '#1e293b' : '#475569'
+      svg += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${strokeW}" stroke-linecap="round"/>`
+    }
+  })
+
+  doors.forEach((d: any) => {
+    if (d.center) {
+      const [cx, cy] = d.center
+      svg += `<circle cx="${cx}" cy="${cy}" r="6" fill="#f59e0b" stroke="#b45309" stroke-width="1.5"/>`
+    }
+  })
+
+  windows.forEach((win: any) => {
+    if (win.center) {
+      const [cx, cy] = win.center
+      svg += `<rect x="${cx - 10}" y="${cy - 4}" width="20" height="8" fill="#3b82f6" stroke="#1d4ed8" stroke-width="1.5" rx="2"/>`
+    }
+  })
+
+  svg += `</svg>`
+
+  const base64Svg = typeof btoa !== 'undefined'
+    ? btoa(unescape(encodeURIComponent(svg)))
+    : Buffer.from(svg).toString('base64')
+
+  return `data:image/svg+xml;base64,${base64Svg}`
+}
+
+// ── Complete Floor Plan Image Resolution Pipeline ─────────────────────────────
+export async function resolveFloorPlanImage(projectId: string, planData?: any): Promise<string> {
+  const planId = planData?.id || projectId
+
+  // 1. Check getPlanImageDataUrl for planId
+  let img = await getPlanImageDataUrl(planId)
+  if (img && img.length > 50) return img
+
+  // 2. Check getPlanImageDataUrl for projectId
+  if (projectId && projectId !== planId) {
+    img = await getPlanImageDataUrl(projectId)
+    if (img && img.length > 50) return img
+  }
+
+  // 3. Check direct properties in planData
+  if (planData) {
+    const candidates = [
+      planData.image_url,
+      planData.preview_url,
+      planData.image,
+      planData.file_data_url,
+      planData.detected_data?.image_url,
+      planData.detected_data?.image,
+    ]
+    for (const cand of candidates) {
+      if (typeof cand === 'string' && cand.length > 50) return cand
+    }
+  }
+
+  // 4. Check window global cache
+  if (typeof window !== 'undefined' && (window as any).__BW_LAST_UPLOADED_IMAGE__) {
+    const winImg = (window as any).__BW_LAST_UPLOADED_IMAGE__
+    if (winImg && winImg.length > 50) return winImg
+  }
+
+  // 5. Check localStorage fallback
+  if (typeof window !== 'undefined') {
+    const keysToTry = [
+      `bw_demo_file_data_${planId}`,
+      `bw_demo_file_data_${projectId}`,
+    ]
+    for (const key of keysToTry) {
+      const val = localStorage.getItem(key)
+      if (val && val.length > 50) return val
+    }
+  }
+
+  // 6. Vector SVG fallback if AI geometry exists
+  if (planData?.detected_data?.rooms && planData.detected_data.rooms.length > 0) {
+    return generateVectorFloorPlanSvg(planData.detected_data)
+  }
+
+  return ''
+}
+

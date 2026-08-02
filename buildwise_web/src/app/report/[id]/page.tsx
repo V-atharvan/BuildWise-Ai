@@ -11,7 +11,8 @@ import { loadMaterialConfig, CEMENT_BRANDS, STEEL_BRAND_LIST, SAND_CATALOG } fro
 import type { AIRoom, AIWall, AIDoor, AIWindow } from '@/lib/floor-plan-ai/types'
 import { Building3DViewer } from '@/components/three-d/Building3DViewer'
 import * as XLSX from 'xlsx'
-import { buildBOQWorksheet } from '@/lib/boq-generator'
+import { buildBOQWorksheet, safeNum } from '@/lib/boq-generator'
+import { resolveFloorPlanImage } from '@/lib/floor-plan-ai/image-cache'
 
 // ── Types for Report State ──────────────────────────────────────────────────
 
@@ -94,9 +95,10 @@ export default function ProjectReportPage() {
       .find(p => p.project_id === projectId || p.id === projectId)
     setPlanData(plan)
 
-    // 3. Get floor plan image using resolved plan ID
-    const planId = plan?.id || projectId
-    setImageUrl(localStorage.getItem(`bw_demo_file_data_${planId}`) || localStorage.getItem(`bw_demo_file_data_${projectId}`) || '')
+    // 3. Asynchronously resolve floor plan image from IndexedDB / memory / properties / vector fallback
+    resolveFloorPlanImage(projectId, plan).then((resolvedImg) => {
+      setImageUrl(resolvedImg)
+    })
 
     // 4. Get estimation results
     const est = localStorage.getItem(`bw_demo_est_${projectId}`) ||
@@ -205,89 +207,109 @@ export default function ProjectReportPage() {
   }, [walls, floorHeight, wallThickness])
 
   // ── Section 7: Complete Master BOQ Categories ───────────────────────────
+  // ── Section 7: Complete Master BOQ Categories ───────────────────────────
   const masterBOQ = useMemo(() => {
-    const cost = safeEstimation.cost_breakdown
-    const mat = safeEstimation.materials
+    const cost = safeEstimation.cost_breakdown || {}
+    const mat = safeEstimation.materials || {}
+
+    const getItem = (sl: string, desc: string, qtyVal: any, unit: string, defaultRate: number, costVal: any) => {
+      const qty = safeNum(qtyVal)
+      let amt = safeNum(costVal)
+      let rate = (qty > 0 && amt > 0) ? Math.round((amt / qty) * 100) / 100 : defaultRate
+
+      // Safeguard: If rate is 0, NaN, or unrealistically small (< 30% of benchmark rate), use defaultRate
+      if (rate <= 0 || !isFinite(rate) || isNaN(rate) || (qty > 0 && rate < defaultRate * 0.3)) {
+        rate = defaultRate
+        amt = Math.round(qty * defaultRate)
+      }
+
+      return { sl, desc, qty, unit, rate, amt }
+    }
 
     return [
       {
         category: '1. Earthwork & Foundations',
         items: [
-          { sl: '1.1', desc: 'Excavation in ordinary soil for columns & foundation pits', qty: mat.excavation_volume, unit: 'm³', rate: Math.round(cost.excavation_cost / (mat.excavation_volume || 1)), amt: cost.excavation_cost },
-          { sl: '1.2', desc: 'Backfilling and soil compaction with selected earth', qty: mat.excavation_volume * 0.85, unit: 'm³', rate: 120, amt: Math.round(mat.excavation_volume * 0.85 * 120) },
+          getItem('1.1', 'Excavation in ordinary soil for columns & foundation pits', mat.excavation_volume, 'm³', 200, cost.excavation_cost),
+          getItem('1.2', 'Backfilling and soil compaction with selected earth', mat.excavation_volume * 0.85, 'm³', 120, Math.round(mat.excavation_volume * 0.85 * 120)),
         ]
       },
       {
         category: '2. Structural RCC (Reinforced Concrete)',
         items: [
-          { sl: '2.1', desc: `RCC frame structures - Concrete (${safeEstimation.user_inputs?.concrete_grade || 'M20'} Grade)`, qty: mat.concrete_volume, unit: 'm³', rate: Math.round(cost.concrete_cost / (mat.concrete_volume || 1)), amt: cost.concrete_cost },
-          { sl: '2.2', desc: `TMT steel reinforcement bars (${safeEstimation.user_inputs?.steel_grade || 'Fe500'} Grade)`, qty: mat.steel_weight, unit: 'kg', rate: Math.round((cost.steel_cost / (mat.steel_weight || 1)) * 10) / 10, amt: cost.steel_cost },
-          { sl: '2.3', desc: 'Centering and shuttering (Formwork for slabs, columns & beams)', qty: mat.concrete_volume * 4.5, unit: 'm²', rate: Math.round((cost.shuttering_cost || (mat.concrete_volume * 4.5 * 380)) / (mat.concrete_volume * 4.5 || 1)), amt: cost.shuttering_cost || Math.round(mat.concrete_volume * 4.5 * 380) },
+          getItem('2.1', `RCC frame structures - Concrete (${safeEstimation.user_inputs?.concrete_grade || 'M20'} Grade)`, mat.concrete_volume, 'm³', 5500, cost.concrete_cost),
+          getItem('2.2', `TMT steel reinforcement bars (${safeEstimation.user_inputs?.steel_grade || 'Fe500'} Grade)`, mat.steel_weight, 'kg', 75, cost.steel_cost),
+          getItem('2.3', 'Centering and shuttering (Formwork for slabs, columns & beams)', mat.concrete_volume * 4.5, 'm²', 380, cost.shuttering_cost || Math.round(mat.concrete_volume * 4.5 * 380)),
         ]
       },
       {
         category: '3. Masonry & Wall Construction',
         items: [
-          { sl: '3.1', desc: `Clay brick masonry in CM 1:6 wall structures`, qty: mat.bricks_count || mat.blocks_count || 0, unit: 'nos', rate: Math.round((cost.brick_cost || cost.block_cost || 0) / ((mat.bricks_count || mat.blocks_count) || 1)), amt: cost.brick_cost || cost.block_cost || 0 },
-          { sl: '3.2', desc: 'Cement (OPC 53 Grade) for mortar mix', qty: mat.cement_bags, unit: 'bags', rate: Math.round(cost.cement_cost / (mat.cement_bags || 1)), amt: cost.cement_cost },
-          { sl: '3.3', desc: 'River sand / Manufactured sand (M-Sand)', qty: mat.sand_volume, unit: 'm³', rate: Math.round(cost.sand_cost / (mat.sand_volume || 1)), amt: cost.sand_cost },
-          { sl: '3.4', desc: 'Crushed stone aggregate 20mm', qty: mat.aggregate_volume, unit: 'm³', rate: Math.round(cost.aggregate_cost / (mat.aggregate_volume || 1)), amt: cost.aggregate_cost },
+          getItem('3.1', `Clay brick masonry in CM 1:6 wall structures`, mat.bricks_count || mat.blocks_count || 0, 'nos', 10, cost.brick_cost || cost.block_cost),
+          getItem('3.2', 'Cement (OPC 53 Grade) for mortar mix', mat.cement_bags, 'bags', 430, cost.cement_cost),
+          getItem('3.3', 'River sand / Manufactured sand (M-Sand)', mat.sand_volume, 'm³', 1400, cost.sand_cost),
+          getItem('3.4', 'Crushed stone aggregate 20mm', mat.aggregate_volume, 'm³', 1600, cost.aggregate_cost),
         ]
       },
       {
         category: '4. Finishing & Plastering Works',
         items: [
-          { sl: '4.1', desc: 'Cement plastering 12mm thick CM 1:4 internal walls', qty: mat.plaster_area, unit: 'm²', rate: Math.round(cost.plaster_cost / (mat.plaster_area || 1)), amt: cost.plaster_cost },
-          { sl: '4.2', desc: 'Emulsion interior wall painting (2 coats over 1 coat primer)', qty: mat.paint_area, unit: 'm²', rate: Math.round(cost.paint_cost / (mat.paint_area || 1)), amt: cost.paint_cost },
-          { sl: '4.3', desc: 'Vitrified floor tiles (600mm × 600mm) including base mortar', qty: mat.tiles_area, unit: 'm²', rate: Math.round(cost.tiles_cost / (mat.tiles_area || 1)), amt: cost.tiles_cost },
-          { sl: '4.4', desc: 'Liquid membrane waterproofing for bathrooms & roof slabs', qty: mat.waterproofing_area, unit: 'm²', rate: Math.round(cost.waterproofing_cost / (mat.waterproofing_area || 1)), amt: cost.waterproofing_cost },
+          getItem('4.1', 'Cement plastering 12mm thick CM 1:4 internal walls', mat.plaster_area, 'm²', 280, cost.plaster_cost),
+          getItem('4.2', 'Emulsion interior wall painting (2 coats over 1 coat primer)', mat.paint_area, 'm²', 120, cost.paint_cost),
+          getItem('4.3', 'Vitrified floor tiles (600mm × 600mm) including base mortar', mat.tiles_area, 'm²', 650, cost.tiles_cost),
+          getItem('4.4', 'Liquid membrane waterproofing for bathrooms & roof slabs', mat.waterproofing_area, 'm²', 380, cost.waterproofing_cost),
         ]
       },
       {
         category: '5. Doors, Windows & Openings',
         items: [
-          { sl: '5.1', desc: 'Wooden flush doors with frames and standard hardware fittings', qty: doors.length || 4, unit: 'nos', rate: Math.round((cost.door_cost || (doors.length || 4) * 8500) / (doors.length || 4)), amt: cost.door_cost || (doors.length || 4) * 8500 },
-          { sl: '5.2', desc: 'UPVC sliding window frames with 5mm clear float glass', qty: windows.length || 6, unit: 'nos', rate: Math.round((cost.window_cost || (windows.length || 6) * 6200) / (windows.length || 6)), amt: cost.window_cost || (windows.length || 6) * 6200 },
+          getItem('5.1', 'Wooden flush doors with frames and standard hardware fittings', doors.length || 4, 'nos', 8500, cost.door_cost || (doors.length || 4) * 8500),
+          getItem('5.2', 'UPVC sliding window frames with 5mm clear float glass', windows.length || 6, 'nos', 6200, cost.window_cost || (windows.length || 6) * 6200),
         ]
       },
       {
         category: '6. Electrical & Plumbing Lines',
         items: [
-          { sl: '6.1', desc: 'Concealed PVC conduit wiring with modular switches & MCBs', qty: rooms.length || 4, unit: 'point', rate: Math.round((cost.electrical_cost || (rooms.length || 4) * 3200) / (rooms.length || 4)), amt: cost.electrical_cost || (rooms.length || 4) * 3200 },
-          { sl: '6.2', desc: 'Internal plumbing lines (CPVC water inlet & PVC drainage pipes)', qty: rooms.filter(r => r.room_type === 'bathroom' || r.room_type === 'kitchen').length || 2, unit: 'job', rate: Math.round((cost.plumbing_cost || (rooms.filter(r => r.room_type === 'bathroom' || r.room_type === 'kitchen').length || 2) * 24000) / (rooms.filter(r => r.room_type === 'bathroom' || r.room_type === 'kitchen').length || 2)), amt: cost.plumbing_cost || (rooms.filter(r => r.room_type === 'bathroom' || r.room_type === 'kitchen').length || 2) * 24000 },
+          getItem('6.1', 'Concealed PVC conduit wiring with modular switches & MCBs', rooms.length || 4, 'point', 3200, cost.electrical_cost || (rooms.length || 4) * 3200),
+          getItem('6.2', 'Internal plumbing lines (CPVC water inlet & PVC drainage pipes)', rooms.filter(r => r.room_type === 'bathroom' || r.room_type === 'kitchen').length || 2, 'job', 24000, cost.plumbing_cost || (rooms.filter(r => r.room_type === 'bathroom' || r.room_type === 'kitchen').length || 2) * 24000),
         ]
       }
     ]
   }, [safeEstimation, doors, windows, rooms])
 
   // ── Section 11: Total area & cost breakdown ──────────────────────────────
-  const areaSqft = safeEstimation.user_inputs?.total_area || 1500
+  const areaSqft = safeNum(safeEstimation.user_inputs?.total_area, 1500)
   const areaSqm = areaSqft * 0.092903
 
   const totalBOQAmount = useMemo(() => {
-    return masterBOQ.reduce((sum, cat) => sum + cat.items.reduce((s, i) => s + i.amt, 0), 0)
+    return masterBOQ.reduce((sum, cat) => sum + cat.items.reduce((s, i) => s + safeNum(i.amt), 0), 0)
   }, [masterBOQ])
 
   const costBreakdownData = useMemo(() => {
+    const cost = safeEstimation.cost_breakdown || {}
     const baseMat = totalBOQAmount
-    const baseLab = safeEstimation.cost_breakdown.labour_cost
-    const baseEqu = safeEstimation.cost_breakdown.equipment_cost
-    const margin = safeEstimation.cost_breakdown.contractor_margin
-    const transport = Math.round(baseMat * 0.04) // 4% transportation
-    const sub = baseMat + baseLab + baseEqu + margin + transport
-    const gst = safeEstimation.cost_breakdown.gst_amount || Math.round(sub * 0.18)
-    const grand = safeEstimation.cost_breakdown.grand_total || (sub + gst)
+    const baseLab = safeNum(cost.labour_cost, 330000)
+    const baseEqu = safeNum(cost.equipment_cost, 55000)
+    const margin = safeNum(cost.contractor_margin, 155000)
+    const contingency = safeNum(cost.contingency, 77000)
+    const transport = Math.round(baseMat * 0.04)
+
+    const subtotal = baseMat + baseLab + baseEqu + margin + contingency
+    const gst = Math.round(subtotal * 0.18)
+    const grand = subtotal + gst
 
     return {
       material: baseMat,
       labour: baseLab,
       equipment: baseEqu,
       margin,
+      contingency,
       transport,
+      subtotal,
       gst,
       grand,
-      perSqft: grand / areaSqft,
-      perSqm: grand / areaSqm,
+      perSqft: grand / (areaSqft || 1),
+      perSqm: grand / (areaSqm || 1),
     }
   }, [totalBOQAmount, safeEstimation, areaSqft, areaSqm])
 
@@ -581,9 +603,9 @@ export default function ProjectReportPage() {
           <div className="border border-black/[0.08] dark:border-white/[0.08] p-4 rounded-2xl bg-[#FAFAFC] dark:bg-black/20 flex flex-col items-center justify-center">
             {imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={imageUrl} alt="Project Plan" className="max-h-[420px] object-contain rounded-lg" />
+              <img src={imageUrl} alt="Project Plan" className="max-h-[420px] w-auto max-w-full object-contain rounded-lg" />
             ) : (
-              <div className="py-20 text-black/30 dark:text-white/20">No plan drawing available.</div>
+              <div className="py-20 text-black/30 dark:text-white/20">Floor plan drawing unavailable for this project.</div>
             )}
             <p className="text-[10px] text-black/40 mt-2 text-center">Fig 1.1: AI Processed floor plan drawing showing rooms, dimensions, and wall locations.</p>
           </div>
@@ -915,7 +937,7 @@ export default function ProjectReportPage() {
 
         {/* ── FINAL REPORT TOTALS SUMMARY ── */}
         <div className="border-t-4 border-double border-[#7C3AED] pt-6 mt-12 flex flex-col items-start text-left">
-          <div className="max-w-[360px] w-full space-y-1.5">
+          <div className="max-w-[380px] w-full space-y-1.5">
             <div className="flex justify-between text-black/55 dark:text-white/40 text-[13px]">
               <span>Aggregate Material Cost:</span>
               <span>{formatCurrency(costBreakdownData.material)}</span>
@@ -925,8 +947,16 @@ export default function ProjectReportPage() {
               <span>{formatCurrency(costBreakdownData.labour)}</span>
             </div>
             <div className="flex justify-between text-black/55 dark:text-white/40 text-[13px]">
+              <span>Equipment &amp; Machinery Rentals:</span>
+              <span>{formatCurrency(costBreakdownData.equipment)}</span>
+            </div>
+            <div className="flex justify-between text-black/55 dark:text-white/40 text-[13px]">
               <span>Contractor Overhead Margin:</span>
               <span>{formatCurrency(costBreakdownData.margin)}</span>
+            </div>
+            <div className="flex justify-between text-black/55 dark:text-white/40 text-[13px]">
+              <span>Contingency Buffer:</span>
+              <span>{formatCurrency(costBreakdownData.contingency)}</span>
             </div>
             <div className="flex justify-between text-black/55 dark:text-white/40 text-[13px] border-b pb-2">
               <span>Taxes &amp; GST (18% applied):</span>

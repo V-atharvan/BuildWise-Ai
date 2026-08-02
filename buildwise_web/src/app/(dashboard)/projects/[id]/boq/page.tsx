@@ -17,7 +17,7 @@ import {
   PAINT_BRAND_LIST, TILE_BRAND_LIST, TILE_TYPE_LIST,
 } from '@/lib/construction-data'
 import * as XLSX from 'xlsx'
-import { buildBOQWorksheet } from '@/lib/boq-generator'
+import { buildBOQWorksheet, exportToExcel } from '@/lib/boq-generator'
 
 // Types based on the backend schemas
 interface BOQItem {
@@ -72,10 +72,10 @@ export default function ProjectBOQTab() {
 
   const [activeTab, setActiveTab] = useState<'building' | 'rooms'>('building')
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    'A. Earthwork': true,
-    'B. RCC & Structural Works': true,
-    'C. Masonry & Materials': true,
-    'D. Finishing Works': true,
+    'A. EARTHWORK': true,
+    'B. RCC & STRUCTURAL WORKS': true,
+    'C. MASONRY & MATERIALS': true,
+    'D. FINISHING WORKS': true,
   })
   const [expandedRooms, setExpandedRooms] = useState<Record<string, boolean>>({})
   const [localBOQ, setLocalBOQ] = useState<BOQData | null>(null)
@@ -185,14 +185,14 @@ export default function ProjectBOQTab() {
 
       const sections = [
         {
-          section_name: "A. Earthwork",
+          section_name: "A. EARTHWORK",
           items: [
             { sl_no: 1, description: "Excavation in ordinary soil for foundations", unit: "m³", quantity: materials.excavation_volume, rate: regRates.excavation_m3 || 200, amount: cost.excavation_cost }
           ],
           subtotal: cost.excavation_cost
         },
         {
-          section_name: "B. RCC & Structural Works",
+          section_name: "B. RCC & STRUCTURAL WORKS",
           items: [
             { sl_no: 2, description: "RCC M20 grade concrete frames", unit: "m³", quantity: materials.concrete_volume, rate: regRates.concrete_rcc_m3 || 5500, amount: cost.concrete_cost },
             { sl_no: 3, description: "Steel reinforcement Fe500 TMT bars", unit: "kg", quantity: materials.steel_weight, rate: steelRate, amount: cost.steel_cost }
@@ -200,7 +200,7 @@ export default function ProjectBOQTab() {
           subtotal: cost.concrete_cost + cost.steel_cost
         },
         {
-          section_name: "C. Masonry & Materials",
+          section_name: "C. MASONRY & MATERIALS",
           items: [
             { sl_no: 4, description: `Masonry wall units (${brickBrand.name})`, unit: "nos", quantity: materials.bricks_count || materials.blocks_count || 0, rate: brickRate, amount: cost.brick_cost || cost.block_cost || 0 },
             { sl_no: 5, description: `Cement (${cementBrand.name})`, unit: "bags", quantity: materials.cement_bags, rate: cementRate, amount: cost.cement_cost },
@@ -210,7 +210,7 @@ export default function ProjectBOQTab() {
           subtotal: (cost.brick_cost || cost.block_cost || 0) + cost.cement_cost + cost.sand_cost + cost.aggregate_cost
         },
         {
-          section_name: "D. Finishing Works",
+          section_name: "D. FINISHING WORKS",
           items: [
             { sl_no: 8, description: "Cement plaster 12mm thick CM 1:4", unit: "m²", quantity: materials.plaster_area, rate: regRates.plaster_m2 || 280, amount: cost.plaster_cost },
             { sl_no: 9, description: `Interior emulsion wall painting (${paintBrand.name})`, unit: "m²", quantity: materials.paint_area, rate: paintRate, amount: cost.paint_cost },
@@ -285,36 +285,7 @@ export default function ProjectBOQTab() {
     if (format === 'excel') {
       setIsExporting('excel')
       try {
-        const workbook = XLSX.utils.book_new()
-        const formattedSections = localBOQ.building_boq.sections.map(sec => ({
-          name: sec.section_name,
-          items: sec.items.map(item => ({
-            sl: item.sl_no,
-            desc: item.description,
-            unit: item.unit,
-            qty: item.quantity,
-            rate: item.rate
-          }))
-        }))
-
-        const boqSheet = buildBOQWorksheet(localBOQ.project_name || 'Project', formattedSections, {
-          labour: localBOQ.building_boq.labour_cost,
-          equipment: localBOQ.building_boq.equipment_cost,
-          margin: localBOQ.building_boq.contractor_margin,
-          contingency: localBOQ.building_boq.contingency
-        })
-
-        XLSX.utils.book_append_sheet(workbook, boqSheet, 'BOQ Report')
-
-        const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
-        const blob = new Blob([excelBuffer], { type: 'application/octet-stream' })
-        const url = URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.setAttribute('href', url)
-        link.setAttribute('download', `BuildWise_BOQ_${projectId}.xlsx`)
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
+        exportToExcel(localBOQ, localBOQ.project_name || 'Project')
       } catch (err) {
         console.error("Local Excel export failed:", err)
       } finally {
