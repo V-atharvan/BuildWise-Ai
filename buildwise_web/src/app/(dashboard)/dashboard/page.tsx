@@ -112,8 +112,8 @@ export default function DashboardPage() {
   return (
     <div className="space-y-7 pt-4">
 
-      {/* Stats Grid — each card is clickable and routes to the right tab */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      {/* Stats Grid — 1 column on mobile, 2 on tablet, 4 on desktop */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat, i) => (
           <motion.button
             key={stat.label}

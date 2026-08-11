@@ -167,8 +167,8 @@ export default function ProjectsPage() {
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex-1 min-w-[200px] relative">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+        <div className="flex-1 min-w-0 relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-black/30 dark:text-white/25" />
           <input
             value={search}
@@ -177,29 +177,31 @@ export default function ProjectsPage() {
             className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-white dark:bg-[#1E1E24] border border-black/[0.07] dark:border-white/[0.07] text-[13.5px] focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/15 transition-all"
           />
         </div>
-        <select
-          value={filterType}
-          onChange={(e) => { setFilterType(e.target.value); setPage(0) }}
-          className="px-3 py-2.5 rounded-2xl bg-white dark:bg-[#1E1E24] border border-black/[0.07] dark:border-white/[0.07] text-[13.5px] focus:outline-none focus:border-violet-500 transition-all"
-        >
-          <option value="">All Types</option>
-          {BUILDING_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-        </select>
-        <select
-          value={filterStatus}
-          onChange={(e) => { setFilterStatus(e.target.value); setPage(0) }}
-          className="px-3 py-2.5 rounded-2xl bg-white dark:bg-[#1E1E24] border border-black/[0.07] dark:border-white/[0.07] text-[13.5px] focus:outline-none focus:border-violet-500 transition-all"
-        >
-          <option value="">All Status</option>
-          {['draft','analyzing','completed','failed'].map(s => <option key={s} value={s} className="capitalize">{s}</option>)}
-        </select>
-        <div className="flex items-center rounded-2xl bg-white dark:bg-[#1E1E24] border border-black/[0.07] dark:border-white/[0.07] p-1">
-          <button onClick={() => setView('grid')} className={`p-2 rounded-xl transition-all ${view === 'grid' ? 'bg-violet-600 text-white' : 'text-black/40 dark:text-white/30 hover:text-black dark:hover:text-white'}`}>
-            <Grid3X3 className="w-4 h-4" />
-          </button>
-          <button onClick={() => setView('list')} className={`p-2 rounded-xl transition-all ${view === 'list' ? 'bg-violet-600 text-white' : 'text-black/40 dark:text-white/30 hover:text-black dark:hover:text-white'}`}>
-            <List className="w-4 h-4" />
-          </button>
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+          <select
+            value={filterType}
+            onChange={(e) => { setFilterType(e.target.value); setPage(0) }}
+            className="flex-1 sm:flex-none px-3 py-2.5 rounded-2xl bg-white dark:bg-[#1E1E24] border border-black/[0.07] dark:border-white/[0.07] text-[13.5px] focus:outline-none focus:border-violet-500 transition-all"
+          >
+            <option value="">All Types</option>
+            {BUILDING_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+          <select
+            value={filterStatus}
+            onChange={(e) => { setFilterStatus(e.target.value); setPage(0) }}
+            className="flex-1 sm:flex-none px-3 py-2.5 rounded-2xl bg-white dark:bg-[#1E1E24] border border-black/[0.07] dark:border-white/[0.07] text-[13.5px] focus:outline-none focus:border-violet-500 transition-all"
+          >
+            <option value="">All Status</option>
+            {['draft','analyzing','completed','failed'].map(s => <option key={s} value={s} className="capitalize">{s}</option>)}
+          </select>
+          <div className="flex items-center rounded-2xl bg-white dark:bg-[#1E1E24] border border-black/[0.07] dark:border-white/[0.07] p-1 flex-shrink-0">
+            <button onClick={() => setView('grid')} className={`p-2 rounded-xl transition-all ${view === 'grid' ? 'bg-violet-600 text-white' : 'text-black/40 dark:text-white/30 hover:text-black dark:hover:text-white'}`}>
+              <Grid3X3 className="w-4 h-4" />
+            </button>
+            <button onClick={() => setView('list')} className={`p-2 rounded-xl transition-all ${view === 'list' ? 'bg-violet-600 text-white' : 'text-black/40 dark:text-white/30 hover:text-black dark:hover:text-white'}`}>
+              <List className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 

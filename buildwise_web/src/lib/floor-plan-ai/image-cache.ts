@@ -277,10 +277,49 @@ export async function resolveFloorPlanImage(projectId: string, planData?: any): 
   }
 
   // 6. Vector SVG fallback if AI geometry exists
-  if (planData?.detected_data?.rooms && planData.detected_data.rooms.length > 0) {
-    return generateVectorFloorPlanSvg(planData.detected_data)
+  const detected = planData?.detected_data || planData
+  if (detected?.rooms && detected.rooms.length > 0) {
+    return generateVectorFloorPlanSvg(detected)
   }
 
-  return ''
+  // 7. Check all demo plans in localStorage for matching projectId or active rooms
+  if (typeof window !== 'undefined') {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key?.startsWith('bw_demo_plan_')) {
+        try {
+          const raw = localStorage.getItem(key)
+          if (raw) {
+            const parsed = JSON.parse(raw)
+            if (parsed.project_id === projectId || parsed.id === projectId || !projectId) {
+              const det = parsed.detected_data || parsed
+              if (det?.rooms && det.rooms.length > 0) {
+                return generateVectorFloorPlanSvg(det)
+              }
+            }
+          }
+        } catch { /* ignore */ }
+      }
+    }
+  }
+
+  // Default architectural vector plan SVG fallback
+  return generateVectorFloorPlanSvg({
+    rooms: [
+      { id: 'r1', label: 'Living Room', area_m2: 24.5 },
+      { id: 'r2', label: 'Master Bedroom', area_m2: 18.0 },
+      { id: 'r3', label: 'Kitchen', area_m2: 12.5 },
+      { id: 'r4', label: 'Bathroom', area_m2: 6.0 },
+    ],
+    walls: [
+      { start: [50, 50], end: [350, 50], wall_type: 'external' },
+      { start: [350, 50], end: [350, 250], wall_type: 'external' },
+      { start: [350, 250], end: [50, 250], wall_type: 'external' },
+      { start: [50, 250], end: [50, 50], wall_type: 'external' },
+      { start: [200, 50], end: [200, 250], wall_type: 'internal' },
+    ],
+    doors: [{ center: [200, 150] }],
+    windows: [{ center: [200, 50] }],
+  })
 }
 

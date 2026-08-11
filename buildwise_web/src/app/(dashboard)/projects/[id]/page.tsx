@@ -221,7 +221,7 @@ export default function ProjectDetailPage() {
     <div className="space-y-6">
       
       {/* Quick Statistics Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {[
           { label: 'Total Area', value: `${totalAreaM2.toFixed(0)} m²`, desc: `${totalAreaSqft.toFixed(0)} sqft`, color: 'text-violet-500' },
           { label: 'Total Rooms', value: totalRoomsCount, desc: 'AI segment partitions', color: 'text-emerald-500' },

@@ -532,7 +532,7 @@ export function Building3DViewer({
   return (
     <div className="relative rounded-2xl overflow-hidden border border-black/[0.06] dark:border-white/[0.06] bg-[#0A0A0F]">
       {/* Toolbar */}
-      <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 p-1 rounded-xl bg-[#1E1E24]/90 backdrop-blur-md border border-white/[0.06] shadow-lg flex-wrap max-w-md">
+      <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 p-1 rounded-xl bg-[#1E1E24]/90 backdrop-blur-md border border-white/[0.06] shadow-lg flex-wrap max-w-[calc(100%-1.5rem)] overflow-x-auto">
         
         {/* Explore Mode Selection (Section 10) */}
         <select 
@@ -571,8 +571,8 @@ export function Building3DViewer({
         <button onClick={() => setShowColumns(!showColumns)} className={`p-1.5 rounded-lg transition-all ${showColumns ? 'bg-amber-500/20 text-amber-400' : 'text-white/40 hover:bg-white/[0.05]'}`} title="Toggle Columns Mode"><Columns className="w-4 h-4" /></button>
       </div>
 
-      {/* Room legend */}
-      <div className="absolute top-3 left-3 z-20 p-2.5 rounded-xl bg-[#1E1E24]/90 backdrop-blur-md border border-white/[0.06] shadow-lg max-h-[220px] overflow-y-auto">
+      {/* Room legend (hidden on tiny screens to avoid obscuring model) */}
+      <div className="hidden sm:block absolute top-3 left-3 z-20 p-2.5 rounded-xl bg-[#1E1E24]/90 backdrop-blur-md border border-white/[0.06] shadow-lg max-h-[220px] overflow-y-auto">
         <p className="text-[10px] font-bold text-white/30 mb-1.5 uppercase tracking-wider">Rooms</p>
         {rooms.map(room => (
           <div key={room.id}
@@ -593,7 +593,7 @@ export function Building3DViewer({
         </div>
       )}
 
-      <div className="h-[600px]">
+      <div className="h-[380px] sm:h-[480px] lg:h-[600px]">
         <Canvas shadows dpr={[1, 2]} gl={{ preserveDrawingBuffer: true }}>
           <PerspectiveCamera makeDefault position={[14, 11, 14]} fov={50} />
           <Scene

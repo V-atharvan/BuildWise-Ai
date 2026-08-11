@@ -124,6 +124,7 @@ export default function FloorPlanEditor2D({
     initialEnd: [number, number]
   } | null>(null)
   const [activeSnapTarget, setActiveSnapTarget] = useState<SnapTarget | null>(null)
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
 
   // New room points accumulator (for 'add_room' tool: supports arbitrary N points)
   const [newRoomPoints, setNewRoomPoints] = useState<[number, number][]>([])
@@ -912,21 +913,21 @@ export default function FloorPlanEditor2D({
       <div className="flex-1 bg-[#121216] border border-white/[0.08] rounded-[24px] overflow-hidden flex flex-col shadow-2xl">
         
         {/* Top Control Bar */}
-        <div className="p-3.5 bg-[#1A1A20] border-b border-white/[0.08] flex flex-wrap items-center justify-between gap-3">
+        <div className="p-2.5 sm:p-3.5 bg-[#1A1A20] border-b border-white/[0.08] flex items-center justify-between gap-2 overflow-x-auto max-w-full">
           
           {/* Tool Buttons */}
-          <div className="flex items-center gap-1 bg-[#24242C] p-1 rounded-xl border border-white/[0.06]">
+          <div className="flex items-center gap-1 bg-[#24242C] p-1 rounded-xl border border-white/[0.06] flex-shrink-0">
             {[
-              { id: 'select', label: 'Select / Move', icon: <MousePointer className="w-4 h-4" /> },
-              { id: 'add_room', label: 'Add Room (Polygon)', icon: <Square className="w-4 h-4 text-emerald-400" /> },
-              { id: 'add_wall', label: 'Add Wall', icon: <Layers className="w-4 h-4 text-purple-400" /> },
-              { id: 'add_door', label: 'Add Door', icon: <DoorOpen className="w-4 h-4 text-amber-400" /> },
-              { id: 'add_window', label: 'Add Window', icon: <AppWindow className="w-4 h-4 text-blue-400" /> },
+              { id: 'select', label: 'Select', icon: <MousePointer className="w-4 h-4" /> },
+              { id: 'add_room', label: 'Room', icon: <Square className="w-4 h-4 text-emerald-400" /> },
+              { id: 'add_wall', label: 'Wall', icon: <Layers className="w-4 h-4 text-purple-400" /> },
+              { id: 'add_door', label: 'Door', icon: <DoorOpen className="w-4 h-4 text-amber-400" /> },
+              { id: 'add_window', label: 'Window', icon: <AppWindow className="w-4 h-4 text-blue-400" /> },
             ].map(tool => (
               <button
                 key={tool.id}
                 onClick={() => { setActiveTool(tool.id as EditorTool); setNewRoomPoints([]); setNewWallStart(null) }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-bold transition-all ${
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-[12px] font-bold transition-all whitespace-nowrap min-h-[36px] ${
                   activeTool === tool.id
                     ? 'bg-violet-600 text-white shadow-md shadow-violet-600/30'
                     : 'text-white/50 hover:text-white/80 hover:bg-white/[0.05]'
@@ -939,29 +940,29 @@ export default function FloorPlanEditor2D({
           </div>
 
           {/* Context Actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
             <button
               onClick={handleUndo}
               disabled={history.length === 0}
               title="Undo (Ctrl+Z)"
-              className="px-2 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] disabled:opacity-30 disabled:hover:bg-white/[0.05] text-white/70 text-[12px] font-bold flex items-center gap-1 border border-white/[0.06] transition-all"
+              className="px-2.5 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] disabled:opacity-30 text-white/70 text-[12px] font-bold flex items-center gap-1 border border-white/[0.06] transition-all min-h-[36px]"
             >
               <Undo2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Undo</span>
             </button>
             <button
               onClick={handleRedo}
               disabled={redoStack.length === 0}
-              title="Redo (Ctrl+Y / Ctrl+Shift+Z)"
-              className="px-2 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] disabled:opacity-30 disabled:hover:bg-white/[0.05] text-white/70 text-[12px] font-bold flex items-center gap-1 border border-white/[0.06] transition-all"
+              title="Redo (Ctrl+Y)"
+              className="px-2.5 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] disabled:opacity-30 text-white/70 text-[12px] font-bold flex items-center gap-1 border border-white/[0.06] transition-all min-h-[36px]"
             >
               <Redo2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Redo</span>
             </button>
             {selectedId && (
               <button
                 onClick={handleDeleteSelected}
-                className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-[12px] font-bold flex items-center gap-1.5 transition-all"
+                className="px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-[12px] font-bold flex items-center gap-1 transition-all min-h-[36px]"
               >
-                <Trash2 className="w-3.5 h-3.5" /> Delete
+                <Trash2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Delete</span>
               </button>
             )}
             <button
@@ -971,15 +972,15 @@ export default function FloorPlanEditor2D({
                 setRooms(cleaned.rooms)
                 setWalls(cleaned.walls)
               }}
-              className="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-[12px] font-bold flex items-center gap-1.5 transition-all"
+              className="px-2.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-[12px] font-bold flex items-center gap-1 transition-all min-h-[36px] whitespace-nowrap"
             >
-              <Sparkles className="w-3.5 h-3.5" /> Auto-Align & Clean Gaps
+              <Sparkles className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Auto-Align & Clean Gaps</span><span className="sm:hidden">Align</span>
             </button>
             <button
               onClick={() => { pushHistory(); handleReset() }}
-              className="px-3 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-white/70 text-[12px] font-bold flex items-center gap-1.5 border border-white/[0.06] transition-all"
+              className="px-2.5 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-white/70 text-[12px] font-bold flex items-center gap-1 border border-white/[0.06] transition-all min-h-[36px] whitespace-nowrap"
             >
-              <RotateCcw className="w-3.5 h-3.5" /> Reset AI Draft
+              <RotateCcw className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Reset AI Draft</span><span className="sm:hidden">Reset</span>
             </button>
           </div>
         </div>

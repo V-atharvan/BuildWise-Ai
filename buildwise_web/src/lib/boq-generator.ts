@@ -471,7 +471,7 @@ export function exportToCSV(estimation: any, projectName: string) {
 // EXPORT TO PROFESSIONAL PDF (WITH DIGITAL SIGNATURE BLOCK)
 // ══════════════════════════════════════════════════════════════════════════════
 
-export function exportToPDF(estimation: any, projectName: string) {
+export function exportToPDF(estimation: any, projectName: string, floorPlanImageUrl?: string) {
   const doc = new jsPDF()
   const items = generateBOQItems(estimation)
   const c = estimation.cost_breakdown || estimation.cost || {}
@@ -580,6 +580,29 @@ export function exportToPDF(estimation: any, projectName: string) {
   doc.text('Prepared By: Quantity Surveyor', 14, currentY)
   doc.text('Checked By: Structural Engineer', 80, currentY)
   doc.text('Approved By: Client / Contractor', 146, currentY)
+
+  // Embed Floor Plan Drawing Page if available
+  if (floorPlanImageUrl && (floorPlanImageUrl.startsWith('data:image') || floorPlanImageUrl.startsWith('http'))) {
+    try {
+      doc.addPage()
+      doc.setFontSize(16)
+      doc.setTextColor(124, 58, 237)
+      doc.text('BuildWise AI — Floor Plan Drawing', 14, 20)
+      doc.setFontSize(9)
+      doc.setTextColor(100, 100, 100)
+      doc.text(`Project: ${projectName} | AI Processed Geometry Blueprint`, 14, 26)
+      doc.line(14, 30, 196, 30)
+
+      const fmt = floorPlanImageUrl.includes('image/png') ? 'PNG' : 'JPEG'
+      doc.addImage(floorPlanImageUrl, fmt, 14, 35, 180, 130)
+
+      doc.setFontSize(8)
+      doc.setTextColor(120, 120, 120)
+      doc.text('Fig 1.1: Processed Floor Plan Drawing showing rooms, detected wall segments, doors, and windows.', 14, 172)
+    } catch (e) {
+      console.warn('Could not embed floor plan image in PDF:', e)
+    }
+  }
 
   doc.save(`BOQ_Report_${projectName.replace(/\s+/g, '_')}.pdf`)
 }

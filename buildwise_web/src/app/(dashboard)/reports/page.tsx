@@ -199,7 +199,7 @@ export default function ReportsPage() {
           {filteredReports.map((report: any) => (
             <div
               key={report.id}
-              className="flex items-center justify-between px-6 py-4 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-all flex-wrap gap-4"
+              className="flex items-center justify-between px-4 py-3.5 sm:px-6 sm:py-4 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-all flex-wrap gap-3"
             >
               <div className="flex items-center gap-3.5 min-w-[200px]">
                 <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center text-violet-500">

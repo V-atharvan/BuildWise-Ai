@@ -259,7 +259,7 @@ export default function UploadPage() {
             onDragOver={handleDrag}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-black/[0.08] dark:border-white/[0.08] hover:border-violet-500/30 rounded-2xl p-12 text-center cursor-pointer hover:bg-violet-600/[0.02] transition-all group"
+            className="border-2 border-dashed border-black/[0.08] dark:border-white/[0.08] hover:border-violet-500/30 rounded-2xl p-6 sm:p-12 text-center cursor-pointer hover:bg-violet-600/[0.02] transition-all group"
           >
             <input
               ref={fileInputRef}
@@ -268,13 +268,23 @@ export default function UploadPage() {
               accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf"
               className="hidden"
             />
-            <div className="w-14 h-14 bg-violet-600/10 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-105 transition-transform">
-              <Upload className="w-7 h-7 text-violet-600" />
+            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-violet-600/10 rounded-2xl flex items-center justify-center mx-auto mb-3 sm:mb-4 group-hover:scale-105 transition-transform">
+              <Upload className="w-6 h-6 sm:w-7 sm:h-7 text-violet-600" />
             </div>
-            <h3 className="font-bold text-[14.5px] mb-1">Drag & Drop building plan here</h3>
-            <p className="text-[12.5px] text-black/40 dark:text-white/30">or click to browse from files</p>
-            <p className="text-[11px] text-black/25 dark:text-white/20 mt-4">
-              Supported: PDF, PNG, JPG, JPEG, DWG, DXF · Max 25MB
+            <h3 className="font-bold text-[14px] sm:text-[14.5px] mb-1">Drag & Drop building plan here</h3>
+            <p className="text-[12px] sm:text-[12.5px] text-black/40 dark:text-white/30 mb-4">or select your floor-plan drawing</p>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                fileInputRef.current?.click()
+              }}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 active:bg-violet-800 text-white font-semibold text-[13px] shadow-md shadow-violet-600/20 mb-3"
+            >
+              <Upload className="w-4 h-4" /> Select File
+            </button>
+            <p className="text-[10.5px] sm:text-[11px] text-black/35 dark:text-white/25">
+              PNG / JPG / PDF / DWG / DXF · Max 25MB
             </p>
           </div>
         ) : (

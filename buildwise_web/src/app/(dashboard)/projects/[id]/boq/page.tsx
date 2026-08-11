@@ -367,32 +367,53 @@ export default function ProjectBOQTab() {
                     </button>
 
                     {isExpanded && (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse text-[12.5px]">
-                          <thead>
-                            <tr className="bg-black/[0.01] dark:bg-white/[0.01] text-[10px] font-bold text-black/45 dark:text-white/30 uppercase border-b border-black/[0.04] dark:border-white/[0.04]">
-                              <th className="px-5 py-3 w-12 text-center">Sl.</th>
-                              <th className="px-5 py-3">Description of Item</th>
-                              <th className="px-5 py-3 w-16">Unit</th>
-                              <th className="px-5 py-3 w-24 text-right">Qty</th>
-                              <th className="px-5 py-3 w-24 text-right">Rate (₹)</th>
-                              <th className="px-5 py-3 w-28 text-right">Amount (₹)</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-black/[0.04] dark:divide-white/[0.04]">
-                            {section.items.map((item) => (
-                              <tr key={item.sl_no} className="hover:bg-black/[0.005] dark:hover:bg-white/[0.005]">
-                                <td className="px-5 py-3 text-center text-black/40">{item.sl_no}</td>
-                                <td className="px-5 py-3 font-semibold text-black/75 dark:text-white/70">{item.description}</td>
-                                <td className="px-5 py-3 text-black/50">{item.unit}</td>
-                                <td className="px-5 py-3 text-right font-medium">{formatNumber(item.quantity)}</td>
-                                <td className="px-5 py-3 text-right text-black/50">{(item.rate ?? 0).toLocaleString()}</td>
-                                <td className="px-5 py-3 text-right font-black text-violet-500">₹{(item.amount ?? 0).toLocaleString()}</td>
+                      <>
+                        {/* Mobile BOQ Cards (<768px) */}
+                        <div className="block md:hidden p-3 space-y-2.5 bg-black/[0.01] dark:bg-white/[0.01]">
+                          {section.items.map((item) => (
+                            <div key={item.sl_no} className="bg-white dark:bg-[#24242C] p-3.5 rounded-xl border border-black/[0.06] dark:border-white/[0.06] space-y-2 text-[12.5px]">
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-violet-500 text-[11px] bg-violet-500/10 px-2 py-0.5 rounded-md">#{item.sl_no}</span>
+                                <span className="font-black text-violet-500 text-[13.5px]">₹{(item.amount ?? 0).toLocaleString()}</span>
+                              </div>
+                              <p className="font-bold text-black/85 dark:text-white/90">{item.description}</p>
+                              <div className="grid grid-cols-3 gap-2 text-[11px] text-black/50 dark:text-white/40 pt-1.5 border-t border-black/[0.04] dark:border-white/[0.04]">
+                                <div><span className="block text-[9.5px] uppercase font-bold text-black/35 dark:text-white/25">Unit</span>{item.unit}</div>
+                                <div><span className="block text-[9.5px] uppercase font-bold text-black/35 dark:text-white/25">Qty</span>{formatNumber(item.quantity)}</div>
+                                <div><span className="block text-[9.5px] uppercase font-bold text-black/35 dark:text-white/25">Rate</span>₹{(item.rate ?? 0).toLocaleString()}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Desktop & Tablet Table (>=768px) */}
+                        <div className="hidden md:block overflow-x-auto">
+                          <table className="w-full text-left border-collapse text-[12.5px]">
+                            <thead>
+                              <tr className="bg-black/[0.01] dark:bg-white/[0.01] text-[10px] font-bold text-black/45 dark:text-white/30 uppercase border-b border-black/[0.04] dark:border-white/[0.04]">
+                                <th className="px-5 py-3 w-12 text-center">Sl.</th>
+                                <th className="px-5 py-3">Description of Item</th>
+                                <th className="px-5 py-3 w-16">Unit</th>
+                                <th className="px-5 py-3 w-24 text-right">Qty</th>
+                                <th className="px-5 py-3 w-24 text-right">Rate (₹)</th>
+                                <th className="px-5 py-3 w-28 text-right">Amount (₹)</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                            </thead>
+                            <tbody className="divide-y divide-black/[0.04] dark:divide-white/[0.04]">
+                              {section.items.map((item) => (
+                                <tr key={item.sl_no} className="hover:bg-black/[0.005] dark:hover:bg-white/[0.005]">
+                                  <td className="px-5 py-3 text-center text-black/40">{item.sl_no}</td>
+                                  <td className="px-5 py-3 font-semibold text-black/75 dark:text-white/70">{item.description}</td>
+                                  <td className="px-5 py-3 text-black/50">{item.unit}</td>
+                                  <td className="px-5 py-3 text-right font-medium">{formatNumber(item.quantity)}</td>
+                                  <td className="px-5 py-3 text-right text-black/50">{(item.rate ?? 0).toLocaleString()}</td>
+                                  <td className="px-5 py-3 text-right font-black text-violet-500">₹{(item.amount ?? 0).toLocaleString()}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
                     )}
                   </div>
                 )
@@ -422,32 +443,53 @@ export default function ProjectBOQTab() {
                     </button>
 
                     {isExpanded && (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse text-[12.5px]">
-                          <thead>
-                            <tr className="bg-black/[0.01] dark:bg-white/[0.01] text-[10px] font-bold text-black/45 dark:text-white/30 uppercase border-b border-black/[0.04] dark:border-white/[0.04]">
-                              <th className="px-5 py-3 w-12 text-center">Sl.</th>
-                              <th className="px-5 py-3">Material Category</th>
-                              <th className="px-5 py-3 w-16">Unit</th>
-                              <th className="px-5 py-3 w-24 text-right">Qty</th>
-                              <th className="px-5 py-3 w-24 text-right">Rate (₹)</th>
-                              <th className="px-5 py-3 w-28 text-right">Amount (₹)</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-black/[0.04] dark:divide-white/[0.04]">
-                            {room.items.map((item) => (
-                              <tr key={item.sl_no}>
-                                <td className="px-5 py-3 text-center text-black/40">{item.sl_no}</td>
-                                <td className="px-5 py-3 font-semibold text-black/75 dark:text-white/70">{item.description}</td>
-                                <td className="px-5 py-3 text-black/50">{item.unit}</td>
-                                <td className="px-5 py-3 text-right font-medium">{formatNumber(item.quantity)}</td>
-                                <td className="px-5 py-3 text-right text-black/50">{(item.rate ?? 0).toLocaleString()}</td>
-                                <td className="px-5 py-3 text-right font-black text-violet-500">₹{(item.amount ?? 0).toLocaleString()}</td>
+                      <>
+                        {/* Mobile Room BOQ Cards (<768px) */}
+                        <div className="block md:hidden p-3 space-y-2.5 bg-black/[0.01] dark:bg-white/[0.01]">
+                          {room.items.map((item) => (
+                            <div key={item.sl_no} className="bg-white dark:bg-[#24242C] p-3.5 rounded-xl border border-black/[0.06] dark:border-white/[0.06] space-y-2 text-[12.5px]">
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-violet-500 text-[11px] bg-violet-500/10 px-2 py-0.5 rounded-md">#{item.sl_no}</span>
+                                <span className="font-black text-violet-500 text-[13.5px]">₹{(item.amount ?? 0).toLocaleString()}</span>
+                              </div>
+                              <p className="font-bold text-black/85 dark:text-white/90">{item.description}</p>
+                              <div className="grid grid-cols-3 gap-2 text-[11px] text-black/50 dark:text-white/40 pt-1.5 border-t border-black/[0.04] dark:border-white/[0.04]">
+                                <div><span className="block text-[9.5px] uppercase font-bold text-black/35 dark:text-white/25">Unit</span>{item.unit}</div>
+                                <div><span className="block text-[9.5px] uppercase font-bold text-black/35 dark:text-white/25">Qty</span>{formatNumber(item.quantity)}</div>
+                                <div><span className="block text-[9.5px] uppercase font-bold text-black/35 dark:text-white/25">Rate</span>₹{(item.rate ?? 0).toLocaleString()}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Desktop & Tablet Table (>=768px) */}
+                        <div className="hidden md:block overflow-x-auto">
+                          <table className="w-full text-left border-collapse text-[12.5px]">
+                            <thead>
+                              <tr className="bg-black/[0.01] dark:bg-white/[0.01] text-[10px] font-bold text-black/45 dark:text-white/30 uppercase border-b border-black/[0.04] dark:border-white/[0.04]">
+                                <th className="px-5 py-3 w-12 text-center">Sl.</th>
+                                <th className="px-5 py-3">Material Category</th>
+                                <th className="px-5 py-3 w-16">Unit</th>
+                                <th className="px-5 py-3 w-24 text-right">Qty</th>
+                                <th className="px-5 py-3 w-24 text-right">Rate (₹)</th>
+                                <th className="px-5 py-3 w-28 text-right">Amount (₹)</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                            </thead>
+                            <tbody className="divide-y divide-black/[0.04] dark:divide-white/[0.04]">
+                              {room.items.map((item) => (
+                                <tr key={item.sl_no}>
+                                  <td className="px-5 py-3 text-center text-black/40">{item.sl_no}</td>
+                                  <td className="px-5 py-3 font-semibold text-black/75 dark:text-white/70">{item.description}</td>
+                                  <td className="px-5 py-3 text-black/50">{item.unit}</td>
+                                  <td className="px-5 py-3 text-right font-medium">{formatNumber(item.quantity)}</td>
+                                  <td className="px-5 py-3 text-right text-black/50">{(item.rate ?? 0).toLocaleString()}</td>
+                                  <td className="px-5 py-3 text-right font-black text-violet-500">₹{(item.amount ?? 0).toLocaleString()}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
                     )}
                   </div>
                 )
